@@ -1,0 +1,18 @@
+
+INITIAL =  {{PARAM = "osc1frequency", value = 0.0}, {PARAM = "osc2frequency", value = 0.0}, {PARAM = "lfoonoff", value = 0.0}, {PARAM = "octaverange", value = 5.0}, {PARAM = "sync", value = 0.0}, 
+          {PARAM = "1voctrouting", value = 3.0},
+}
+
+function parameterMap.onChange(valueObjects, origin, midiValue)
+  if (origin ~= INTERNAL) then return end
+  local msg = valueObjects[1]:getMessage()
+  if msg:getType() ~= PT_VIRTUAL then return end
+  local pNum = msg:getParameterNumber()
+  if pNum == 1002 then -- initialize
+    if midiValue == 1 then
+      for i = 1,#INITIAL do
+      parameterMap.set(deviceId, PT_VIRTUAL, i-1, INITIAL.value[i])
+      end
+    end
+  end
+end
