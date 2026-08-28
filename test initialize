@@ -1,18 +1,19 @@
-
-INITIAL =  {{PARAM = "osc1frequency", value = 0.0}, {PARAM = "osc2frequency", value = 0.0}, {PARAM = "lfoonoff", value = 0.0}, {PARAM = "octaverange", value = 5.0}, {PARAM = "sync", value = 0.0}, 
-          {PARAM = "1voctrouting", value = 3.0},
+INITIAL =  {
+          {PARAM = "osc1frequency", value = 8192}, {PARAM = "osc2frequency", value = 8192}, {PARAM = "lfoonoff", value = 0.0}, {PARAM = "octaverange", value = 5.0}, {PARAM = "sync", value = 0.0}, 
+          {PARAM = "1voctrouting", value = 3.0}, {PARAM = "transpose", value = 0.0}, {PARAM="portamento", value=0.0}, {PARAM ="midipitchbend", value=2.0}, {PARAM ="wavefoldinput", value=0.0},
+          {PARAM ="folddepth", value=16383},{PARAM ="foldbias", value=0.0},{PARAM ="foldbiasanimate", value=8192}, {PARAM ="pulsewidth", value=8192},{PARAM ="pwmanimate", value=8192},
+          {PARAM ="animateonoff", value=1.0},{PARAM ="waveformselect", value=0.0},{PARAM ="filtercutoff", value=16383}, {PARAM ="filterkeytrack", value=0.0},{PARAM ="outputlevel", value=16383},
+          {PARAM ="diffuseamount", value=0.0},{PARAM ="envmode", value=0.0},{PARAM ="envattack", value=1625},{PARAM ="envdecay", value=1723},{PARAM ="envsustain", value=8192},
+          {PARAM ="envrelease", value=1723},{PARAM ="envshape", value=1.0},{PARAM ="envgate", value=1.0},{PARAM ="envretrigonoff", value=1.0},{PARAM ="envtriggerbutton", value=1.0},
+          {PARAM ="envtriggerjack", value=1.0},{PARAM ="envtriggernoteon", value=1.0},{PARAM ="extend", value=0.0},{PARAM ="lforate", value=5300},{PARAM ="lforatesubdivision", value=9.0},
+          {PARAM ="lfotimemode", value=0.0},{PARAM ="lfomode", value=0.0},{PARAM ="lfopolarity", value=0.0},{PARAM ="lfophase", value=0.0},{PARAM ="lfotriggerbutton", value=0.0},{PARAM ="lfotriggerjack", value=0.0},
+          {PARAM ="lfotriggernoteon", value=0.0},{PARAM ="rndlforatesync", value=1.0},{PARAM ="rndrate", value=8192},{PARAM ="rndratesubdivision", value=9.0},{PARAM ="rndtimemode", value=0.0},
+          {PARAM ="rndpolarity", value=0.0},{PARAM ="rnddensity", value=16383},{PARAM ="rndsmoothing", value=0.0},{PARAM ="rndtriggerbutton", value=0.0},{PARAM ="rndtriggerjack", value=0.0},{PARAM ="rndtriggernoteon", value=0.0},
+          {PARAM ="taptempoenable", value=1.0},{PARAM ="macro", value=2422},{PARAM ="mxsource1", value=2.0},{PARAM ="mxsource2", value=0.0},{PARAM ="mxsource3", value=0.0},{PARAM ="mxsource4", value=0.0},
+          {PARAM ="mxdesta", value=6.0},{PARAM ="mxdestb", value=0.0},{PARAM ="mxdestc", value=0.0},{PARAM ="mxdestd", value=0.0},{PARAM ="mxnode1a", value=16383},{PARAM ="mxnode1b", value=8192},{PARAM ="mxnode1c", value=8192},
+          {PARAM ="mxnode1d", value=8192},{PARAM ="mxnode2a", value=8192},{PARAM ="mxnode2b", value=8192},{PARAM ="mxnode2c", value=8192},{PARAM ="mxnode2d", value=8192},{PARAM ="mxnode3a", value=8192},{PARAM ="mxnode3b", value=8192},
+          {PARAM ="mxnode3c", value=8192},{PARAM ="mxnode3d", value=8192},{PARAM ="mxnode4a", value=8192},{PARAM ="mxnode4b", value=8192},PARAM ="mxnode4c", value=8192},{PARAM ="mxnode4d", value=8192},{PARAM ="mxnode1alock", value=0.0},
+          {PARAM ="mxnode1block", value=0.0},{PARAM ="mxnode1clock", value=0.0},{PARAM ="mxnode1dlock", value=0.0},{PARAM ="mxnode2alock", value=0.0},{PARAM ="mxnode2block", value=0.0},{PARAM ="mxnode2clock", value=0.0},
+          {PARAM ="mxnode2dlock", value=0.0},{PARAM ="mxnode3alock", value=0.0},{PARAM ="mxnode3block", value=0.0},{PARAM ="mxnode3clock", value=0.0},{PARAM ="mxnode3dlock", value=0.0},{PARAM ="mxnode4alock", value=0.0},
+          {PARAM ="mxnode4block", value=0.0},{PARAM ="mxnode4clock", value=0.0},{PARAM ="mxnode4dlock", value=0.0},{PARAM ="monitormix", value=16383},{PARAM ="pickupbehaviour", value=0.0},
 }
-
-function parameterMap.onChange(valueObjects, origin, midiValue)
-  if (origin ~= INTERNAL) then return end
-  local msg = valueObjects[1]:getMessage()
-  if msg:getType() ~= PT_VIRTUAL then return end
-  local pNum = msg:getParameterNumber()
-  if pNum == 1002 then -- initialize
-    if midiValue == 1 then
-      for i = 1,#INITIAL do
-      parameterMap.set(deviceId, PT_VIRTUAL, i-1, INITIAL.value[i])
-      end
-    end
-  end
-end
