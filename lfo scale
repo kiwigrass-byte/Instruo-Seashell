@@ -1,0 +1,16 @@
+function LFOScale(valueObject,value)
+    -- Input range: 0 to 127
+    local inputMin = 0
+    local inputMax = 16383
+    -- Output range: 0.0 to 131 Hz
+    local outputMin = 0.05
+    local outputMax = 131
+    local x = value
+    -- Clamp input to range
+    x = math.max(inputMin, math.min(inputMax, x))
+    -- Calculate normalized input (0 to 1)
+    local t = (x - inputMin) / (inputMax - inputMin)
+    -- Exponential formula: y = min * (max/min)^t
+    local y = outputMin * math.exp(t * math.log(outputMax / outputMin))
+    return (string.format ("%.2f", y) .. " Hz")
+end
