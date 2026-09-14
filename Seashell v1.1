@@ -475,32 +475,39 @@ end
 -- COMPARE_IT toggle
 -- value 1: cache edited state (B), recall unedited baseline (A)
 -- value 0: recall cached edited state (B)
+
+local compareLatched = false
+
 function compareIt(valueObject, value)
   local v = math.floor(tonumber(value) or 0)
 
   if v == 1 then
-    -- if no baseline exists yet, use current state as baseline
-    if not compareUneditedPM then
-      compareUneditedPM = snapshotCurrentPM()
+    if not compareLatched then
+      if not compareUneditedPM then
+        compareUneditedPM = snapshotCurrentPM()
+      end
+      compareEditedPM = snapshotCurrentPM()
+
+      dprint(("COMPARE cache set; p1=%d p2=%d p34=%d"):format(
+        compareEditedPM[1] or -1, compareEditedPM[2] or -1, compareEditedPM[34] or -1
+      ))
+
+      compareLatched = true
     end
 
-    -- cache current edited state before recalling baseline
-    compareEditedPM = snapshotCurrentPM()
-
-    -- show/reload unedited patch and send to synth
     sendPresetToSeashell(compareUneditedPM)
     dprint("COMPARE_IT=1 -> showing unedited patch")
     return
   end
 
   if v == 0 then
-    if compareEditedPM then
-      -- restore edited patch and send to synth
+    if compareLatched and compareEditedPM then
       sendPresetToSeashell(compareEditedPM)
       dprint("COMPARE_IT=0 -> restored edited patch")
     else
       dprint("COMPARE_IT=0 -> no cached edited patch to restore")
     end
+    compareLatched = false
     return
   end
 end
