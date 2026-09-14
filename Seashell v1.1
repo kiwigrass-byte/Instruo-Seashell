@@ -1,4 +1,3 @@
-
 -- a debug helper. remove later
 local DEBUG = true
 
@@ -51,7 +50,7 @@ local SELECT_IT = 10011
 
 -- control id numbers
 -- control Ids for the controls that I only want to send MIDI data after I have released the knob
-local CTRL_RELEASE = {149,150,152} -- control patch selector 
+local CTRL_SELECT_IT = {149,150,152} -- control patch selector 
 -- edited/patch comparison control ids
 local CTRL_COMPARE_IT = {81,83,84} 
 
@@ -494,7 +493,7 @@ function events.onPotTouchChange(potId, controlId, touched)
   local help = HELP_TEXTS[controlId]
   if help then showHelp(help) end
 
-  local idx = get_key_for_value(CTRL_RELEASE,controlId)
+  local idx = get_key_for_value(CTRL_SELECT_IT,controlId)
   if (idx == nil) then return end
   if (touched == true) and (curCtl ~= controlId) then curCtl = controlId end
   if (touched == false) and (curCtl == controlId) then
