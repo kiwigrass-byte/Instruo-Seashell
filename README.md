@@ -1,4 +1,4 @@
-# Instruo Seashell with patch loading and comparison mode
+# Instruo Seashell preset for Electra One mk2 MIDI controller with patch loading and comparison mode
 
 - Synth must be on at least fw 2.0 (August 2026)
 
