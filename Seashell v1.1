@@ -41,7 +41,11 @@ local PARAM_NUM = 96
 local ENV_MODE = 21
 local LFO_RATE_TYPE = 35
 local RND_RATE_TYPE = 45
-
+local SYNC_TO_LFO = 42
+local LFO_RATE = 33
+local RND_RATE = 43
+local LFO_NOTE = 34
+local RND_NOTE = 44
 -- virtual parameter numbers
 local COMPARE_IT = 10010 -- comparsion of edited and patch parameter values
 local SELECT_IT = 10011
@@ -52,11 +56,13 @@ local CTRL_SELECT_IT = {149,150,152} -- control patch selector
 -- edited/patch comparison control ids
 local CTRL_COMPARE_IT = {81,83,84} 
 local CTRL_LFO_RATE = 41
-local CTRL_LFO_SYNC = 42
+local CTRL_LFO_NOTE = 42
 local CTRL_RND_RATE = 92
-local CTRL_RND_SYNC = 93
+local CTRL_RND_NOTE = 93
 local CTRL_DECAY_TIME = 4
 local CTRL_SUSTAIN_LEVEL = 5
+local CTRL_SYNC_TO_LFO = 99
+local CTRL_RND_RATE_TYPE = 91
 
 -- comparison state (A/B)
 -- A = unedited loaded patch snapshot
@@ -74,14 +80,7 @@ end
 function showLFORate(valueObject, value)
   local mode = parameterMap.get(deviceId, PT_VIRTUAL, LFO_RATE_TYPE)
   local isSync = (mode == 1)
-  setPairVisibility(CTRL_LFO_SYNC, CTRL_LFO_RATE, isSync)
-end
-
--- display/hide random rate and note sync
-function showRNDRate(valueObject, value)
-  local mode = parameterMap.get(deviceId, PT_VIRTUAL, RND_RATE_TYPE)
-  local isSync = (mode == 1)
-  setPairVisibility(CTRL_RND_SYNC, CTRL_RND_RATE, isSync)
+  setPairVisibility(CTRL_LFO_NOTE, CTRL_LFO_RATE, isSync)
 end
 
 -- display/hide decay time and sustain level
@@ -90,6 +89,22 @@ function showADSR(valueObject, value)
   local show = (mode == 1)
   controls.get(CTRL_DECAY_TIME):setVisible(show)
   controls.get(CTRL_SUSTAIN_LEVEL):setVisible(show)
+end
+
+-- display/hide random rate and note sync
+function showRNDRate(valueObject, value)
+  local rndMode   = parameterMap.get(deviceId, PT_VIRTUAL, RND_RATE_TYPE) or 0
+  local syncToLfo = (parameterMap.get(deviceId, PT_VIRTUAL, SYNC_TO_LFO) or 0) == 1
+  if syncToLfo then
+    -- LFO is master: hide all RND timing controls
+    controls.get(CTRL_RND_RATE_TYPE):setVisible(false)
+    controls.get(CTRL_RND_RATE):setVisible(false)
+    controls.get(CTRL_RND_NOTE):setVisible(false)
+    return
+  end
+  -- normal (independent) mode: show type selector and the active value control
+  controls.get(CTRL_RND_RATE_TYPE):setVisible(true)
+  setPairVisibility(CTRL_RND_NOTE, CTRL_RND_RATE, rndMode == 1)
 end
 
 -- Add % sign
@@ -141,6 +156,15 @@ function lfoScale(valueObject,value)
     return (string.format("%.2f", 131) .. " Hz")
   else
     return (string.format("%.2f", f) .. " Hz")
+  end
+end
+
+function syncToLFO(valueObject,value)
+  if value == nil then return end
+--  local lfoSync = parameterMap.get(deviceId, PT_VIRTUAL, SYNC_TO_LFO)
+  if value == 1 then
+    local lfoRate = parameterMap.get(deviceId, PT_VIRTUAL, LFO_RATE)
+    parameterMap.set(deviceId, PT_VIRTUAL, RND_RATE, lfoRate)
   end
 end
 
@@ -469,6 +493,63 @@ function formatPresetName(valueObject, value)
   return "Preset " .. tostring(value)
 end
 
+-- set parameters and send CCs to reset modo matrix to match init patch
+function resetIt(valueObject,value)
+  if value == 0 then return end
+  local preset = PRESETS[0]
+  if not preset then
+    dprint("RESET_IT: unknown preset index " .. tostring(value))
+    return
+  end
+  local pm = PM_RAW_to_PM(preset.raw)
+  for i = 55, 94 do
+    local v = pm[i] or 0
+    parameterMap.set(deviceId, PT_VIRTUAL, i - 1, v)
+    local msb = math.floor(v / 128)
+    local lsb = v % 128
+    midi.sendControlChange(port, 14, i - 1, msb)
+    midi.sendControlChange(port, 15, i - 1, lsb)
+    dprint(("CC14/15 sent: controller=%d msb=%d lsb=%d"):format(i - 1, msb, lsb))
+  end
+  dprint("Reset Mod Matrix")
+end
+
+-- block to handle sync of random rate/notes to lfo rate/notes
+-- guard to avoid re-entrant loops when we set RND_RATE from inside onChange
+local syncingRndToLfo = false
+
+-- if sync is enabled, force RND mode/value to follow LFO mode/value
+local function applyRndLfoSync()
+  if syncingRndToLfo then return end
+  local sync = parameterMap.get(deviceId, PT_VIRTUAL, SYNC_TO_LFO) or 0
+  if sync ~= 1 then return end
+  syncingRndToLfo = true
+  -- LFO mode dominates
+  local lfoMode = parameterMap.get(deviceId, PT_VIRTUAL, LFO_RATE_TYPE) or 0
+  local rndMode = parameterMap.get(deviceId, PT_VIRTUAL, RND_RATE_TYPE) or 0
+  -- 1) align RND mode to LFO mode
+  if rndMode ~= lfoMode then
+    parameterMap.set(deviceId, PT_VIRTUAL, RND_RATE_TYPE, lfoMode)
+  end
+  -- 2) align value in the active mode
+  if lfoMode == 1 then
+    -- note-sync mode: copy LFO_NOTE -> RND_NOTE
+    local lfoNote = parameterMap.get(deviceId, PT_VIRTUAL, LFO_NOTE) or 0
+    local rndNote = parameterMap.get(deviceId, PT_VIRTUAL, RND_NOTE) or -1
+    if rndNote ~= lfoNote then
+      parameterMap.set(deviceId, PT_VIRTUAL, RND_NOTE, lfoNote)
+    end
+  else
+    -- free-rate mode: copy LFO_RATE -> RND_RATE
+    local lfoRate = parameterMap.get(deviceId, PT_VIRTUAL, LFO_RATE) or 0
+    local rndRate = parameterMap.get(deviceId, PT_VIRTUAL, RND_RATE) or -1
+    if rndRate ~= lfoRate then
+      parameterMap.set(deviceId, PT_VIRTUAL, RND_RATE, lfoRate)
+    end
+  end
+  syncingRndToLfo = false
+end
+
 -- COMPARE_IT toggle
 -- value 1: cache edited state (B), recall unedited baseline (A)
 -- value 0: recall cached edited state (B)
@@ -509,6 +590,8 @@ function compareIt(valueObject, value)
     end
 
     sendPresetToSeashell(compareUneditedPM)
+    applyRndLfoSync()       -- <- enforce lock for recalled A state
+    showRNDRate(nil, nil)   -- <- keep UI consistent (optional but recommended)
     dprint("COMPARE_IT=1 -> showing unedited patch")
     return
   end
@@ -516,6 +599,8 @@ function compareIt(valueObject, value)
   if v == 0 then
     if compareLatched and compareEditedPM then
       sendPresetToSeashell(compareEditedPM)
+      applyRndLfoSync()       -- <- enforce lock for recalled B state
+      showRNDRate(nil, nil)   -- <- keep UI consistent (optional but recommended)
       dprint("COMPARE_IT=0 -> restored edited patch")
     else
       dprint("COMPARE_IT=0 -> no cached edited patch to restore")
@@ -525,33 +610,24 @@ function compareIt(valueObject, value)
   end
 end
 
--- set parameters and send CCs to reset modo matrix to match init patch
-function resetIt(valueObject,value)
-  if value == 0 then return end
-  local preset = PRESETS[0]
-  if not preset then
-    dprint("RESET_IT: unknown preset index " .. tostring(value))
-    return
-  end
-  local pm = PM_RAW_to_PM(preset.raw)
-  for i = 55, 94 do
-    local v = pm[i] or 0
-    parameterMap.set(deviceId, PT_VIRTUAL, i - 1, v)
-    local msb = math.floor(v / 128)
-    local lsb = v % 128
-    midi.sendControlChange(port, 14, i - 1, msb)
-    midi.sendControlChange(port, 15, i - 1, lsb)
-    dprint(("CC14/15 sent: controller=%d msb=%d lsb=%d"):format(i - 1, msb, lsb))
-  end
-  dprint("Reset Mod Matrix")
-end
-
 -- parameterMap on change callback
 function parameterMap.onChange(valueObjects, origin, midiValue)
   if (origin ~= INTERNAL) then return end
   local msg = valueObjects[1]:getMessage()
   if msg:getType() ~= PT_VIRTUAL then return end
   local pNum = msg:getParameterNumber()
+
+  -- keep RND_RATE locked to LFO_RATE when sync is enabled
+if pNum == SYNC_TO_LFO or pNum == LFO_RATE_TYPE
+  or pNum == LFO_RATE or pNum == LFO_NOTE
+  then
+    applyRndLfoSync()
+  end
+
+  if pNum == SYNC_TO_LFO or pNum == RND_RATE_TYPE then
+    showRNDRate(nil, nil)
+  end
+
   local msb_value = math.floor(midiValue/128)
   local lsb_value = midiValue%128
   if pNum < 128 then
@@ -594,6 +670,12 @@ function events.onPotTouchChange(potId, controlId, touched)
       return
     end
     sendPresetToSeashell(pm)
+
+    -- enforce LFO->RND lock if SYNC_TO_LFO is enabled in the loaded preset
+    applyRndLfoSync()
+
+    -- always refresh RND visibility after patch load
+    showRNDRate(nil, nil)
 
     -- refresh compare baseline to newly loaded preset (unedited A state)
     compareUneditedPM = clonePM(pm)
