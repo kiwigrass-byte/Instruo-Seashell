@@ -11,6 +11,7 @@
 - Parameter values for the default set of 2.0 patches are hard-coded in the preset and are sent when selected from the **PATCH SELECTOR**. 
 - Use the **COMPARE TO PATCH** control to switch between an edited sound (and UI) and the original patch sound (and UI). Very useful! 
 - Mimics the layout and features of the Seashell app.
+- Hides controls when not available.
 ---
 **What's not in the preset**
 - Patch saving. 
