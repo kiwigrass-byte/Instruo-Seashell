@@ -111,26 +111,6 @@ function showADSR(valueObject,value)
   end
 end
 
-notes = {
-    "C%d",
-    "C%d#",
-    "D%d",
-    "D%d#",
-    "E%d",
-    "F%d",
-    "F%d#",
-    "G%d",
-    "G%d#",
-    "A%d",
-    "A#%d",
-    "B%d"
-}
-
--- Map MIDI value to note names
-function displayNotes (valueObject, value)
-    return (string.format(notes[math.fmod(value, 12) + 1], value // 12))
-end
-
 -- helper function to round to nearest integer
 function math.round(x)
     if x >= 0 then
