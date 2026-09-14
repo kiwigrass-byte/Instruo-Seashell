@@ -34,9 +34,7 @@ end
 -- curCtl holds which of the control knobs was touched (HT @oldgearguy)
 curCtl   = -1
 
-
---- CONSTANTS
-
+--------- Global Constants---------------
 -- number of MIDI parameters on Seashell
 local PARAM_NUM = 96 
 -- synth parameter numbers
@@ -53,6 +51,12 @@ local SELECT_IT = 10011
 local CTRL_SELECT_IT = {149,150,152} -- control patch selector 
 -- edited/patch comparison control ids
 local CTRL_COMPARE_IT = {81,83,84} 
+local CTRL_LFO_RATE = 41
+local CTRL_LFO_SYNC = 42
+local CTRL_RND_RATE = 92
+local CTRL_RND_SYNC = 93
+local CTRL_DECAY_TIME = 4
+local CTRL_SUSTAIN_LEVEL = 5
 
 -- comparison state (A/B)
 -- A = unedited loaded patch snapshot
@@ -60,63 +64,32 @@ local CTRL_COMPARE_IT = {81,83,84}
 local compareEditedPM   = nil
 local compareUneditedPM = nil
 
--- Capture current 96 PT_VIRTUAL params from Electra
-local function snapshotCurrentPM()
-  local pm = {}
-  for i = 1, PARAM_NUM do
-    pm[i] = parameterMap.get(deviceId, PT_VIRTUAL, i - 1) or 0
-  end
-  return pm
+-- Generic helper for two controls where one is the inverse of the other.
+local function setPairVisibility(firstControlId, secondControlId, showFirst)
+  controls.get(firstControlId):setVisible(showFirst)
+  controls.get(secondControlId):setVisible(not showFirst)
 end
 
-local function clonePM(src)
-  if not src then return nil end
-  local dst = {}
-  for i = 1, #src do dst[i] = src[i] end
-  return dst
+-- display/hide lfo rate and note sync
+function showLFORate(valueObject, value)
+  local mode = parameterMap.get(deviceId, PT_VIRTUAL, LFO_RATE_TYPE)
+  local isSync = (mode == 1)
+  setPairVisibility(CTRL_LFO_SYNC, CTRL_LFO_RATE, isSync)
 end
 
-function showLFORate(valueObject,value)
-  if parameterMap.get (deviceId, PT_VIRTUAL, LFO_RATE_TYPE ) == 0 then 
-    controls.get(42):setVisible(false)
-    controls.get(41):setVisible(true)
-  elseif parameterMap.get (deviceId, PT_VIRTUAL, LFO_RATE_TYPE ) == 1 then
-    controls.get(42):setVisible(true)
-    controls.get(41):setVisible(false)
-  end
+-- display/hide random rate and note sync
+function showRNDRate(valueObject, value)
+  local mode = parameterMap.get(deviceId, PT_VIRTUAL, RND_RATE_TYPE)
+  local isSync = (mode == 1)
+  setPairVisibility(CTRL_RND_SYNC, CTRL_RND_RATE, isSync)
 end
 
-function showRNDRate(valueObject,value)
-  if parameterMap.get (deviceId, PT_VIRTUAL, RND_RATE_TYPE ) == 0 then 
-    controls.get(93):setVisible(false)
-    controls.get(92):setVisible(true)
-  elseif parameterMap.get (deviceId, PT_VIRTUAL, RND_RATE_TYPE ) == 1 then
-    controls.get(93):setVisible(true)
-    controls.get(92):setVisible(false)
-  end
-end
-
-function showADSR(valueObject,value)
-  local option = parameterMap.get (deviceId, PT_VIRTUAL, ENV_MODE )
-  if option == 0 then 
-    controls.get(4):setVisible(false)
-    controls.get(5):setVisible(false)
-  elseif option == 1 then
-    controls.get(4):setVisible(true)
-    controls.get(5):setVisible(true)
-  elseif option == 2 then 
-    controls.get(4):setVisible(false)
-    controls.get(5):setVisible(false)
-  end
-end
-
--- helper function to round to nearest integer
-function math.round(x)
-    if x >= 0 then
-        return math.floor(x + 0.5)
-    else
-        return math.ceil(x - 0.5)
-    end
+-- display/hide decay time and sustain level
+function showADSR(valueObject, value)
+  local mode = parameterMap.get(deviceId, PT_VIRTUAL, ENV_MODE)
+  local show = (mode == 1)
+  controls.get(CTRL_DECAY_TIME):setVisible(show)
+  controls.get(CTRL_SUSTAIN_LEVEL):setVisible(show)
 end
 
 -- Add % sign
@@ -408,6 +381,15 @@ local function lfoScaleReverse(freq)
   return math.floor(x + 0.5) -- Round to nearest integer
 end
 
+-- helper function to round to nearest integer
+function math.round(x)
+    if x >= 0 then
+        return math.floor(x + 0.5)
+    else
+        return math.ceil(x - 0.5)
+    end
+end
+
 -- helper to convert seashell preset file into table of 96 scaled parameters 
 local function PM_RAW_to_PM(pm_raw)
   local pm = {}
@@ -477,48 +459,6 @@ local function sendPresetToSeashell(pm)
   end
 end
 
--- helper function to find match between touched control and target list of controls
-local function get_key_for_value(t, value) 
-   if (t ~= nil) then
-      for k,v in pairs(t) do
-         if v==value then return k end
-      end
-   end
-   return nil
-end
-
--- Patch selector on release
-function events.onPotTouchChange(potId, controlId, touched)
---  if not touched then return end
-  local help = HELP_TEXTS[controlId]
-  if help then showHelp(help) end
-
-  local idx = get_key_for_value(CTRL_SELECT_IT,controlId)
-  if (idx == nil) then return end
-  if (touched == true) and (curCtl ~= controlId) then curCtl = controlId end
-  if (touched == false) and (curCtl == controlId) then
-    local value = controls.get(controlId):getValue("value"):getMessage():getValue()
-    local index = math.floor(tonumber(value) or -1)
-    local preset = PRESETS[index]
-    if not preset then
-      dprint("SELECT_IT: unknown preset index " .. tostring(value))
-      return
-    end
-    local pm = PM_RAW_to_PM(preset.raw)
-    if #pm ~= PARAM_NUM then
-      dprint(("SELECT_IT: '%s' has %d params (expected 96)"):format(preset.name, #pm))
-      return
-    end
-    sendPresetToSeashell(pm)
-
-    -- refresh compare baseline to newly loaded preset (unedited A state)
-    compareUneditedPM = clonePM(pm)
-    compareEditedPM   = nil
-    parameterMap.set(deviceId, PT_VIRTUAL, COMPARE_IT, 0)
-
-    dprint(("Loaded preset %d => %s"):format(idx, preset.name))  end
-end
-
 -- Value formatter for the preset selector control label
 function formatPresetName(valueObject, value)
   local idx = math.floor(tonumber(value) or -1)
@@ -532,6 +472,22 @@ end
 -- COMPARE_IT toggle
 -- value 1: cache edited state (B), recall unedited baseline (A)
 -- value 0: recall cached edited state (B)
+
+-- Capture current 96 PT_VIRTUAL params from Electra
+local function snapshotCurrentPM()
+  local pm = {}
+  for i = 1, PARAM_NUM do
+    pm[i] = parameterMap.get(deviceId, PT_VIRTUAL, i - 1) or 0
+  end
+  return pm
+end
+
+local function clonePM(src)
+  if not src then return nil end
+  local dst = {}
+  for i = 1, #src do dst[i] = src[i] end
+  return dst
+end
 
 local compareLatched = false
 
@@ -603,4 +559,46 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
     midi.sendControlChange(port, 15, pNum, lsb_value)
     dprint("CC14 sent:" .. " controllerNumber=" .. pNum .. " msb value=" .. msb_value .. " lsb value=" .. lsb_value )
   end
+end
+
+-- helper function to find match between touched control and target list of controls
+local function get_key_for_value(t, value) 
+   if (t ~= nil) then
+      for k,v in pairs(t) do
+         if v==value then return k end
+      end
+   end
+   return nil
+end
+
+-- Patch selector on release
+function events.onPotTouchChange(potId, controlId, touched)
+--  if not touched then return end
+  local help = HELP_TEXTS[controlId]
+  if help then showHelp(help) end
+
+  local idx = get_key_for_value(CTRL_SELECT_IT,controlId)
+  if (idx == nil) then return end
+  if (touched == true) and (curCtl ~= controlId) then curCtl = controlId end
+  if (touched == false) and (curCtl == controlId) then
+    local value = controls.get(controlId):getValue("value"):getMessage():getValue()
+    local index = math.floor(tonumber(value) or -1)
+    local preset = PRESETS[index]
+    if not preset then
+      dprint("SELECT_IT: unknown preset index " .. tostring(value))
+      return
+    end
+    local pm = PM_RAW_to_PM(preset.raw)
+    if #pm ~= PARAM_NUM then
+      dprint(("SELECT_IT: '%s' has %d params (expected 96)"):format(preset.name, #pm))
+      return
+    end
+    sendPresetToSeashell(pm)
+
+    -- refresh compare baseline to newly loaded preset (unedited A state)
+    compareUneditedPM = clonePM(pm)
+    compareEditedPM   = nil
+    parameterMap.set(deviceId, PT_VIRTUAL, COMPARE_IT, 0)
+
+    dprint(("Loaded preset %d => %s"):format(idx, preset.name))  end
 end
