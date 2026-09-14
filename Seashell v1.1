@@ -36,20 +36,46 @@ end
 curCtl   = -1
 
 
+--- CONSTANTS
+
+-- number of MIDI parameters on Seashell
+local PARAM_NUM = 96 
 -- synth parameter numbers
-ENV_MODE = 21
-LFO_RATE_TYPE = 35
-RND_RATE_TYPE = 45
+local ENV_MODE = 21
+local LFO_RATE_TYPE = 35
+local RND_RATE_TYPE = 45
 
 -- virtual parameter numbers
-COMPARE_IT = 10010 -- comparsion of edited and patch parameter values
-SELECT_IT = 10011
+local COMPARE_IT = 10010 -- comparsion of edited and patch parameter values
+local SELECT_IT = 10011
 
 -- control id numbers
 -- control Ids for the controls that I only want to send MIDI data after I have released the knob
 local CTRL_RELEASE = {149,150,151} -- control patch selector 
 -- edited/patch comparison control ids
 local CTRL_COMPARE_IT = {81,83,84} 
+
+-- comparison state (A/B)
+-- A = unedited loaded patch snapshot
+-- B = cached edited snapshot
+local compareEditedPM   = nil
+local compareUneditedPM = nil
+
+-- Capture current 96 PT_VIRTUAL params from Electra
+local function snapshotCurrentPM()
+  local pm = {}
+  for i = 1, PARAM_NUM do
+    pm[i] = parameterMap.get(deviceId, PT_VIRTUAL, i - 1) or 0
+  end
+  return pm
+end
+
+local function clonePM(src)
+  if not src then return nil end
+  local dst = {}
+  for i = 1, #src do dst[i] = src[i] end
+  return dst
+end
 
 function showLFORate(valueObject,value)
   if parameterMap.get (deviceId, PT_VIRTUAL, LFO_RATE_TYPE ) == 0 then 
@@ -335,7 +361,7 @@ local function PM_RAW_to_PM(pm_raw)
     end
   end
   -- Safety check: Seashell preset should give 96 PARAM values
-  if #pm ~= 96 then
+  if #pm ~= PARAM_NUM then
     error(("PM_RAW_to_PM: expected 96 params, got %d (input may be truncated)"):format(#pm))
   end
   -- convert non-0/1 scaled parameter values to 14-bit numbers
@@ -422,13 +448,18 @@ function events.onPotTouchChange(potId, controlId, touched)
       return
     end
     local pm = PM_RAW_to_PM(preset.raw)
-    if #pm ~= 96 then
+    if #pm ~= PARAM_NUM then
       dprint(("SELECT_IT: '%s' has %d params (expected 96)"):format(preset.name, #pm))
       return
     end
     sendPresetToSeashell(pm)
-    dprint(("Loaded preset %d => %s"):format(idx, preset.name))
-  end
+
+    -- refresh compare baseline to newly loaded preset (unedited A state)
+    compareUneditedPM = clonePM(pm)
+    compareEditedPM   = nil
+    parameterMap.set(deviceId, PT_VIRTUAL, COMPARE_IT, 0)
+
+    dprint(("Loaded preset %d => %s"):format(idx, preset.name))  end
 end
 
 -- Value formatter for the preset selector control label
@@ -439,6 +470,39 @@ function formatPresetName(valueObject, value)
     return p.name
   end
   return "Preset " .. tostring(value)
+end
+
+-- COMPARE_IT toggle
+-- value 1: cache edited state (B), recall unedited baseline (A)
+-- value 0: recall cached edited state (B)
+function compareIt(valueObject, value)
+  local v = math.floor(tonumber(value) or 0)
+
+  if v == 1 then
+    -- if no baseline exists yet, use current state as baseline
+    if not compareUneditedPM then
+      compareUneditedPM = snapshotCurrentPM()
+    end
+
+    -- cache current edited state before recalling baseline
+    compareEditedPM = snapshotCurrentPM()
+
+    -- show/reload unedited patch and send to synth
+    sendPresetToSeashell(compareUneditedPM)
+    dprint("COMPARE_IT=1 -> showing unedited patch")
+    return
+  end
+
+  if v == 0 then
+    if compareEditedPM then
+      -- restore edited patch and send to synth
+      sendPresetToSeashell(compareEditedPM)
+      dprint("COMPARE_IT=0 -> restored edited patch")
+    else
+      dprint("COMPARE_IT=0 -> no cached edited patch to restore")
+    end
+    return
+  end
 end
 
 -- set parameters and send CCs to reset modo matrix to match init patch
