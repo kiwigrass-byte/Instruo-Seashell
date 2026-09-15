@@ -12,25 +12,16 @@ local port      = currentDevice:getPort ()
 
 local authorDate = "kiwigrass 2026" -- populate the bottom RH screen information display on load
 info.setText(authorDate)
-local infoDisplayTicks = 0  -- Tracks how many ticks have passed for the timer.onTick function
-timer.setPeriod(500) -- Set timer tick rate (e.g., every 500 milliseconds)
 
 events.subscribe(POTS|PAGES) -- for pot touch help and on release, and start on main page
-
--- starting and stopping the timer for displaying names and help text
-function timer.onTick()
-  infoDisplayTicks = infoDisplayTicks + 1
-  if infoDisplayTicks > 4 then
-    timer.disable()
-    info.setText(authorDate)
-  end
-end
 
 function preset.onLoad()
   pages.display(1)
 end
 
 --------- Global Constants---------------
+local TIMER_PERIOD_MS = 500
+local TIMER_DISPLAY_TICKS = 4
 -- number of MIDI parameters on Seashell
 local PARAM_NUM = 96 
 -- msb/lsb channels
@@ -179,6 +170,19 @@ local HELP_TEXTS = {
   [105]   = "shift + tap Sync",   [31]  = "shift + 1V/Oct",   [29]  = "shift + LF",   [18]  = "shift + press Gate/Trig",   
   [17]  = "shift + hold Gate/Trg",  
 }
+
+-- starting and stopping the timer for displaying names and help text
+timer.setPeriod(TIMER_PERIOD_MS) -- Set timer tick rate (e.g., every 500 milliseconds)
+
+local infoDisplayTicks = 0  -- Tracks how many ticks have passed for the timer.onTick function
+
+function timer.onTick()
+  infoDisplayTicks = infoDisplayTicks + 1
+  if infoDisplayTicks > TIMER_DISPLAY_TICKS then
+    timer.disable()
+    info.setText(authorDate)
+  end
+end
 
 local function showHelp(helpText)
   info.setText(helpText)
@@ -427,7 +431,7 @@ function resetIt(valueObject,value)
     return
   end
   local pm = parsePresetParameters(preset.raw)
-  for i = MOD_MATRIX_FIRST_PARAM, MOD_MATRIX_FIRST_PARAM do
+  for i = MOD_MATRIX_FIRST_PARAM, MOD_MATRIX_LAST_PARAM do
     local v = pm[i+1] or 0
     parameterMap.set(deviceId, PT_VIRTUAL, i, v)
     send14BitCC(i, v)
@@ -453,7 +457,7 @@ local function applyRndLfoSync()
   -- 1) align RND mode to LFO mode
   if rndMode ~= lfoMode then
     parameterMap.set(deviceId, PT_VIRTUAL, RND_RATE_TYPE, lfoMode)
-    sendParamCC14_15(RND_RATE_TYPE, lfoMode)
+    send14BitCC(RND_RATE_TYPE, lfoMode)
   end
 
   -- 2) align value in the active mode, and send mirrored param too
