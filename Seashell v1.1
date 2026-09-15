@@ -147,15 +147,6 @@ function lfoScale(valueObject,value)
   end
 end
 
-function syncToLFO(valueObject,value)
-  if value == nil then return end
---  local lfoSync = parameterMap.get(deviceId, PT_VIRTUAL, SYNC_TO_LFO)
-  if value == 1 then
-    local lfoRate = parameterMap.get(deviceId, PT_VIRTUAL, LFO_RATE)
-    parameterMap.set(deviceId, PT_VIRTUAL, RND_RATE, lfoRate)
-  end
-end
-
 -- ── AHDSR value-in-name suffix ───────────────────────────────────────────────
 -- Appends the live value of an AHDSR envelope's primary stage to its tile
 -- title, e.g. "AMP ATTACK" -> "AMP ATTACK 101". The base (unsuffixed) name is
