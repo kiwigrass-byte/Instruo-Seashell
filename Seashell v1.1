@@ -99,6 +99,7 @@ function updateRndVisibility(valueObject, value)
   setPairVisibility(CTRL_RND_NOTE, CTRL_RND_RATE, rndMode == 1)
 end
 
+-- value formatters --
 function percent(valueObject,value) ---- 
   return string.format ("%d %%", math.floor(100*value/16383))
 end
