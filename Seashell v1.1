@@ -30,10 +30,6 @@ function preset.onLoad()
   pages.display(1)
 end
 
--- I only want to send patch select MIDI messages after the control knob is released to avoid sending a stream of messagess when scrolling patches
--- curCtl holds which of the control knobs was touched (HT @oldgearguy)
-curCtl   = -1
-
 --------- Global Constants---------------
 -- number of MIDI parameters on Seashell
 local PARAM_NUM = 96 
@@ -48,13 +44,11 @@ local LFO_NOTE = 34
 local RND_NOTE = 44
 -- virtual parameter numbers
 local COMPARE_IT = 10010 -- comparsion of edited and patch parameter values
-local SELECT_IT = 10011
+local SELECT_IT = 10011 -- patch selector param
 
 -- control id numbers
--- control Ids for the controls that I only want to send MIDI data after I have released the knob
 local CTRL_SELECT_IT = {149,150,152} -- control patch selector 
--- edited/patch comparison control ids
-local CTRL_COMPARE_IT = {81,83,84} 
+local CTRL_COMPARE_IT = {81,83,84} -- edited/patch comparison control ids
 local CTRL_LFO_RATE = 41
 local CTRL_LFO_NOTE = 42
 local CTRL_RND_RATE = 92
@@ -63,12 +57,6 @@ local CTRL_DECAY_TIME = 4
 local CTRL_SUSTAIN_LEVEL = 5
 local CTRL_SYNC_TO_LFO = 99
 local CTRL_RND_RATE_TYPE = 91
-
--- comparison state (A/B)
--- A = unedited loaded patch snapshot
--- B = cached edited snapshot
-local compareEditedPM   = nil
-local compareUneditedPM = nil
 
 -- Generic helper for two controls where one is the inverse of the other.
 local function setPairVisibility(firstControlId, secondControlId, showFirst)
@@ -201,7 +189,7 @@ local function showHelp(helpText)
   timer.enable()
 end
 
--- labels for the 96 Seashell parameters
+-- labels for the 96 Seashell parameters (not used)
 local PARAM_NAMES =  {[0] = {"osc1frequency"}, {"osc2frequency"},  {"lfoonoff" },  {"octaverange"},  {"sync" }, {"1voctrouting"},  {"transpose" },  {"portamento" }, {"midipitchbend"}, {"wavefoldinput" },
           {"folddepth" }, {"foldbias" },{"foldbiasanimate" }, {"pulsewidth" }, {"pwmanimate" }, {"animateonoff" }, {"waveformselect" }, {"filtercutoff" }, {"filterkeytrack" }, {"outputlevel" },
           {"diffuseamount" }, {"envmode" }, {"envattack" }, {"envdecay" }, {"envsustain" }, {"envrelease" }, {"envshape" }, {"envgate" }, {"envretrigonoff" }, {"envtriggerbutton" }, {"envtriggerjack" },
@@ -373,25 +361,26 @@ local PRESETS = {
   [19] = { name = "Frodo", raw = FRODO_RAW },
   [20] = { name = "Montage", raw = MONTAGE_RAW },
   [21] = { name = "Rando Calrissian", raw = RANDO_CALRISSIAN_RAW },
-  [22] = { name = "Kick", raw = KICK_RAW },
-  [23] = { name = "Snare", raw = SNARE_RAW },
-  [24] = { name = "Sourdrum Starter", raw = SOURDRUM_STARTER_RAW },
-  [25] = { name = "Stone Table", raw = STONE_TABLE_RAW },
-  [26] = { name = "Brassy", raw = BRASSY_RAW },
-  [27] = { name = "Chip Tune", raw = CHIP_TUNE_RAW },
-  [28] = { name = "Octave Pluck", raw = OCTAVE_PLUCK_RAW },
-  [29] = { name = "One Octave Trill", raw = ONE_OCTAVE_TRILL_RAW },
-  [30] = { name = "Pink Echoes", raw = PINK_ECHOES_RAW },
-  [31] = { name = "Pluck Short", raw = PLUCK_SHORT_RAW },
-  [32] = { name = "Popcorn", raw = POPCORN_RAW },
-  [33] = { name = "Saw Slapback", raw = SAW_SLPABACK_RAW },
-  [34] = { name = "Shine On", raw = SHINE_ON_RAW },
-  [35] = { name = "Tremelo", raw = TREMELO_RAW },
-  [36] = { name = "ACME Ray Gun", raw = ACME_RAY_GUN_RAW },
-  [37] = { name = "Kurtz", raw = KURTZ_RAW },
-  [38] = { name = "Red Alert", raw = RED_ALERT_RAW },
-  [39] = { name = "Ring Ring", raw = RING_RING_RAW },
-  [40] = { name = "Sound of the Future", raw = SOUND_OF_THE_FUTURE_RAW },
+  [22] = { name = "Rhythmic FC", raw = RHYTHMIC_FC_RAW },
+  [23] = { name = "Kick", raw = KICK_RAW },
+  [24] = { name = "Snare", raw = SNARE_RAW },
+  [25] = { name = "Sourdrum Starter", raw = SOURDRUM_STARTER_RAW },
+  [26] = { name = "Stone Table", raw = STONE_TABLE_RAW },
+  [27] = { name = "Brassy", raw = BRASSY_RAW },
+  [28] = { name = "Chip Tune", raw = CHIP_TUNE_RAW },
+  [29] = { name = "Octave Pluck", raw = OCTAVE_PLUCK_RAW },
+  [30] = { name = "One Octave Trill", raw = ONE_OCTAVE_TRILL_RAW },
+  [31] = { name = "Pink Echoes", raw = PINK_ECHOES_RAW },
+  [32] = { name = "Pluck Short", raw = PLUCK_SHORT_RAW },
+  [33] = { name = "Popcorn", raw = POPCORN_RAW },
+  [34] = { name = "Saw Slapback", raw = SAW_SLPABACK_RAW },
+  [35] = { name = "Shine On", raw = SHINE_ON_RAW },
+  [36] = { name = "Tremelo", raw = TREMELO_RAW },
+  [37] = { name = "ACME Ray Gun", raw = ACME_RAY_GUN_RAW },
+  [38] = { name = "Kurtz", raw = KURTZ_RAW },
+  [39] = { name = "Red Alert", raw = RED_ALERT_RAW },
+  [40] = { name = "Ring Ring", raw = RING_RING_RAW },
+  [41] = { name = "Sound of the Future", raw = SOUND_OF_THE_FUTURE_RAW },
 }
 
 -- helper for converting scaled lfo rates to 0-16383 values
@@ -493,7 +482,7 @@ function formatPresetName(valueObject, value)
   return "Preset " .. tostring(value)
 end
 
--- set parameters and send CCs to reset modo matrix to match init patch
+-- set parameters and send CCs to reset mod matrix to match init patch
 function resetIt(valueObject,value)
   if value == 0 then return end
   local preset = PRESETS[0]
@@ -514,7 +503,8 @@ function resetIt(valueObject,value)
   dprint("Reset Mod Matrix")
 end
 
--- block to handle sync of random rate/notes to lfo rate/notes
+--------- block to handle sync of random rate/notes to lfo rate/notes ---------------------
+
 -- guard to avoid re-entrant loops when we set RND_RATE from inside onChange
 local syncingRndToLfo = false
 
@@ -550,9 +540,14 @@ local function applyRndLfoSync()
   syncingRndToLfo = false
 end
 
--- COMPARE_IT toggle
+------------------ COMPARE_IT toggle block -----------------------------------
 -- value 1: cache edited state (B), recall unedited baseline (A)
 -- value 0: recall cached edited state (B)
+-- comparison state (A/B)
+-- A = unedited loaded patch snapshot
+-- B = cached edited snapshot
+local compareEditedPM   = nil
+local compareUneditedPM = nil
 
 -- Capture current 96 PT_VIRTUAL params from Electra
 local function snapshotCurrentPM()
@@ -610,32 +605,10 @@ function compareIt(valueObject, value)
   end
 end
 
--- parameterMap on change callback
-function parameterMap.onChange(valueObjects, origin, midiValue)
-  if (origin ~= INTERNAL) then return end
-  local msg = valueObjects[1]:getMessage()
-  if msg:getType() ~= PT_VIRTUAL then return end
-  local pNum = msg:getParameterNumber()
+-------------------- Patch selector on knob release ----------------------------------
 
-  -- keep RND_RATE locked to LFO_RATE when sync is enabled
-if pNum == SYNC_TO_LFO or pNum == LFO_RATE_TYPE
-  or pNum == LFO_RATE or pNum == LFO_NOTE
-  then
-    applyRndLfoSync()
-  end
-
-  if pNum == SYNC_TO_LFO or pNum == RND_RATE_TYPE then
-    showRNDRate(nil, nil)
-  end
-
-  local msb_value = math.floor(midiValue/128)
-  local lsb_value = midiValue%128
-  if pNum < 128 then
-    midi.sendControlChange(port, 14, pNum, msb_value)
-    midi.sendControlChange(port, 15, pNum, lsb_value)
-    dprint("CC14 sent:" .. " controllerNumber=" .. pNum .. " msb value=" .. msb_value .. " lsb value=" .. lsb_value )
-  end
-end
+-- curCtl holds which of the control knobs was touched (HT @oldgearguy)
+local curCtl   = -1
 
 -- helper function to find match between touched control and target list of controls
 local function get_key_for_value(t, value) 
@@ -647,7 +620,6 @@ local function get_key_for_value(t, value)
    return nil
 end
 
--- Patch selector on release
 function events.onPotTouchChange(potId, controlId, touched)
 --  if not touched then return end
   local help = HELP_TEXTS[controlId]
@@ -669,7 +641,11 @@ function events.onPotTouchChange(potId, controlId, touched)
       dprint(("SELECT_IT: '%s' has %d params (expected 96)"):format(preset.name, #pm))
       return
     end
+    -- send patch parameter values to Seashell
     sendPresetToSeashell(pm)
+
+    -- send a program change to the Seashell as well (so Seashell app also stays in sync)
+    midi.sendProgramChange(port, channel, index)
 
     -- enforce LFO->RND lock if SYNC_TO_LFO is enabled in the loaded preset
     applyRndLfoSync()
@@ -684,3 +660,32 @@ function events.onPotTouchChange(potId, controlId, touched)
 
     dprint(("Loaded preset %d => %s"):format(idx, preset.name))  end
 end
+
+-- parameterMap on change callback
+function parameterMap.onChange(valueObjects, origin, midiValue)
+  if (origin ~= INTERNAL) then return end
+  local msg = valueObjects[1]:getMessage()
+  if msg:getType() ~= PT_VIRTUAL then return end
+  local pNum = msg:getParameterNumber()
+
+  -- keep RND_RATE locked to LFO_RATE when sync is enabled
+  if pNum == SYNC_TO_LFO or pNum == LFO_RATE_TYPE
+  or pNum == LFO_RATE or pNum == LFO_NOTE
+  then
+    applyRndLfoSync()
+  end
+
+  if pNum == SYNC_TO_LFO or pNum == RND_RATE_TYPE then
+    showRNDRate(nil, nil)
+  end
+
+  -- send MSB/LSB CC messages for new MIDI value
+  local msb_value = math.floor(midiValue/128)
+  local lsb_value = midiValue%128
+  if pNum < 128 then
+    midi.sendControlChange(port, 14, pNum, msb_value)
+    midi.sendControlChange(port, 15, pNum, lsb_value)
+    dprint("CC14 sent:" .. " controllerNumber=" .. pNum .. " msb value=" .. msb_value .. " lsb value=" .. lsb_value )
+  end
+end
+
