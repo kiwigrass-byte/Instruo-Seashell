@@ -17,7 +17,9 @@
 # Instruo Seashell preset for Electra One mk2 MIDI controller with patch loading and comparison mode (7bit version)
 
 - Synth must be on at least fw 2.0 (August 2026)
-- **IMPORTANT:** The preset sends 7-bit parameter values and program change messages on MIDI channel 2. Change to match the MIDI channel on the Seashell.
+- **IMPORTANT:** The preset sends 7-bit parameter values and program change messages on MIDI channel 2. Change to match the MIDI channel on the Seashell. 
+
+- The preset assumes the MIDI parameter mapping in the Seashell app is in the exact order as listed from 0 to 94. 
 
 ---
 **What's in the preset**
@@ -25,6 +27,7 @@
 - The **COMPARE TO PATCH** control allows switching between an edited sound (and UI) and the original patch sound (and UI). Very useful! 
 - Mimics the layout and most features of the Seashell app.
 - Hides controls when not available.
+- The Seashell app will update with parameter changes made on the E1.
 ---
 **What's not in the preset**
 - Patch saving.   
