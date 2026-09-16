@@ -151,7 +151,7 @@ end
 -- captured the first time each control is seen so repeat updates don't keep
 -- stacking suffixes onto an already-modified name.
 
-local adsrBaseNames = setmetatable({}, {__mode = "k"})
+local adsrBaseNames = setmetatable({}, {__mode = "v"})
 
 function adsrValueName(valueObject, value)
   local ctrl = valueObject:getControl()
