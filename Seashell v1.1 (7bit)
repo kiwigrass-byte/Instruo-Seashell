@@ -339,18 +339,6 @@ local function lfoScaleReverse(freq)
   return math.floor(x + 0.5) -- Round to nearest integer
 end
 
-local function clamp(v, lo, hi)
-  if v < lo then return lo end
-  if v > hi then return hi end
-  return v
-end
-
-local function to7bit(v)
-  v = math.floor(tonumber(v) or 0)
-  if v <= MIDI_MAX then return clamp(v, 0, MIDI_MAX) end
-  return math.floor((v * MIDI_MAX) / MIDI_SRC_MAX + 0.5)
-end
-
 -- helper function to round to nearest integer
 function math.round(x)
     if x >= 0 then
@@ -364,72 +352,21 @@ local function scale01(x) return math.round(x * MIDI_MAX) end
 local function scaleSymmetric(x, min, max) return math.round(((x - min) * MIDI_MAX) / (max - min)) end
 local function scale0N(x, max) return math.round((x * MIDI_MAX) / max) end
 
--- map 0,1 values to 0,127
-local function map0_1(x)
-    return math.floor(x*127)
+-- map 0,1,..N values to corresponding 0..127 values
+local function map0_N(x, max)
+  x = tonumber(x) or 0
+  if x <= 0 then return 0 end
+  if x >= max then return 127 end
+  -- Reserve 127 for the maximum; evenly distribute intermediate states over 0..126.
+  return math.floor((x * 126) / max + 0.5)
 end
 
--- map 1,2 values to 0,127
-local function map1_2(x)
-    return math.floor((x-1)*127)
-end
-
--- map 0..2 values to 0,64,127
-local function map0_2(x)
-  if x < 2 then
-    return math.floor(x*64)
-  else
-    return 127
-  end
-end
-
--- map 0..3 values to 0,42,84,127
-local function map0_3(x)
-  if x < 3 then
-    return math.floor(x*42)
-  else
-    return 127
-  end
-end
-
--- map 0..7 values to 0,16,32,..,127
-local function map0_7(x)
-  if x < 7 then
-    return math.floor(x*16)
-  else
-    return 127
-  end
-end
-
--- map 0..19 values to 0,7,14,..,127
-local function map0_19(x)
-  if x < 19 then
-    return math.floor(x*16)
-  else
-    return 127
-  end
-end
-
--- map 1..6 values to 0,26,52,..,127
-local function map1_6(x)
-  if x > 1 and x < 6 then
-    return math.floor((x-1)*26)
-  elseif x == 6 then
-    return 127
-  else
-    return 0
-  end
-end
-
--- map 1..12 values to 0,12,24,..,127
-local function map1_12(x)
-  if x > 1 and x < 12 then
-    return math.floor((x-1)*12)
-  elseif x == 12 then
-    return 127
-  else
-    return 0
-  end
+-- map 1..N values to 0..127
+local function map1_N(x, max)
+  x = tonumber(x) or 1
+  if x <= 1 then return 0 end
+  if x >= max then return 127 end
+  return math.floor(((x - 1) * 127) / (max - 1) + 0.5)
 end
 
 -- helper to convert seashell preset file into table of 96 scaled parameters 
@@ -448,64 +385,64 @@ local function parsePresetParameters(pm_raw)
   -- convert non-0/1 scaled parameter values to 14-bit numbers
   pm[1]  = scaleSymmetric(pm[1], -1, 1) -- -1..1
   pm[2]  = scaleSymmetric(pm[2], -1, 1)
-  pm[3]  = map0_1(pm[3])
-  pm[4]  = map1_6(pm[4])
-  pm[5]  = map0_3(pm[5])
-  pm[6]  = map0_3(pm[6])
-  pm[7]  = map0_3(pm[7])
+  pm[3]  = map0_N(pm[3],1)
+  pm[4]  = map1_N(pm[4],6)
+  pm[5]  = map0_N(pm[5],3)
+  pm[6]  = map0_N(pm[6],3)
+  pm[7]  = map0_N(pm[7],3)
   pm[8]  = scale0N(pm[8], 100) -- 0..100
-  pm[9]  = map1_12(pm[9])
-  pm[10] = map0_1(pm[10])
+  pm[9]  = map1_N(pm[9],12)
+  pm[10] = map0_N(pm[10],1)
   pm[11] = scale0N(pm[11], 100)
   pm[12] = scale0N(pm[12], 100)
   pm[13] = scale0N(pm[13], 100)
   pm[14] = scale0N(pm[14], 100)
   pm[15] = scale0N(pm[15], 100)
-  pm[16] = map0_1(pm[16])
-  pm[17] = map0_7(pm[17])
+  pm[16] = map0_N(pm[16],1)
+  pm[17] = map0_N(pm[17],7)
   pm[18] = scale0N(pm[18], 100) 
   pm[19] = scaleSymmetric(pm[19], -100, 100) -- -100..100
   pm[20] = scale0N(pm[20], 100) 
   pm[21] = scale0N(pm[21], 100)
-  pm[22] = map0_2(pm[22])
+  pm[22] = map0_N(pm[22],2)
   pm[23] = scale0N(pm[23], 10) -- 0..10
   pm[24] = scale0N(pm[24], 10)
   pm[25] = scale0N(pm[25], 100)
   pm[26] = scale0N(pm[26], 10)
-  pm[27] = map0_1(pm[27])
-  pm[28] = map0_1(pm[28])
-  pm[29] = map0_1(pm[29])
-  pm[30] = map0_1(pm[30])
-  pm[31] = map0_1(pm[31])
-  pm[32] = map0_1(pm[32])
-  pm[33] = map0_1(pm[33])
+  pm[27] = map0_N(pm[27],1)
+  pm[28] = map0_N(pm[28],1)
+  pm[29] = map0_N(pm[29],1)
+  pm[30] = map0_N(pm[30],1)
+  pm[31] = map0_N(pm[31],1)
+  pm[32] = map0_N(pm[32],1)
+  pm[33] = map0_N(pm[33],1)
   pm[34] = math.round(lfoScaleReverse(pm[34]))  -- lfo rate
-  pm[35] = map0_19(pm[35])
-  pm[36] = map0_1(pm[36])
-  pm[37] = map0_2(pm[37])
-  pm[38] = map0_1(pm[38])
+  pm[35] = map0_N(pm[35],19)
+  pm[36] = map0_N(pm[36],1)
+  pm[37] = map0_N(pm[37],2)
+  pm[38] = map0_N(pm[38],1)
   pm[39] = math.round(((180+pm[39])*MIDI_MAX)/360) -- -180..180
-  pm[40] = map0_1(pm[40])
-  pm[41] = map0_1(pm[41])
-  pm[42] = map0_1(pm[42])
-  pm[43] = map0_1(pm[43])
+  pm[40] = map0_N(pm[40],1)
+  pm[41] = map0_N(pm[41],1)
+  pm[42] = map0_N(pm[42],1)
+  pm[43] = map0_N(pm[43],1)
   pm[44] = math.round(lfoScaleReverse(pm[44]))  -- random rate
-  pm[45] = map0_19(pm[45])
-  pm[46] = map0_1(pm[46])
-  pm[47] = map0_1(pm[47])
+  pm[45] = map0_N(pm[45],19)
+  pm[46] = map0_N(pm[46],1)
+  pm[47] = map0_N(pm[47],1)
   pm[48] = scale0N(pm[48], 100)
   pm[49] = scale0N(pm[49], 100)
-  pm[50] = map0_1(pm[50])
-  pm[51] = map0_1(pm[51])
-  pm[52] = map0_1(pm[52])
-  pm[53] = map0_1(pm[53])
+  pm[50] = map0_N(pm[50],1)
+  pm[51] = map0_N(pm[51],1)
+  pm[52] = map0_N(pm[52],1)
+  pm[53] = map0_N(pm[53],1)
   pm[54] = scale0N(pm[54], 100)
 
   for i = 63,78 do
     pm[i] = scaleSymmetric(pm[i], -100, 100) -- -100..100
   end
   for i = 79,94 do
-    pm[i] = map0_1(pm[i])
+    pm[i] = map0_N(pm[i],1)
   end
   pm[95] = scale0N(pm[95], 100)
   return pm
@@ -513,9 +450,11 @@ end
 
 -- helper function to send 7-bit CC on channel channel
 local function sendCC(paramNum, value)
-  local v = to7bit(value)
+  local v = math.floor(tonumber(value) or 0)
+  if v < 0 or v > 127 then
+    error(("Invalid 7-bit value %d for CC %d"):format(v, paramNum))
+  end
   midi.sendControlChange(port, channel, paramNum, v)
-  dprint(("CC7 sent: controller=%d value=%d"):format(paramNum, v))
 end
 
 -- Send a full 96-param preset (14-bit split to CC14/CC15)
