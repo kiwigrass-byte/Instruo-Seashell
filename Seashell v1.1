@@ -1,5 +1,5 @@
 -- a debug helper. remove later
-local DEBUG = false
+local DEBUG = true
 
 local function dprint(msg)
    if DEBUG then print(msg) end
@@ -28,7 +28,15 @@ local PARAM_NUM = 96
 local MSB_CHANNEL = 14
 local LSB_CHANNEL = 15
 
-local MIDI_14BIT_MAX = 16383
+local MIDI_MAX = 16383
+
+function changeMidiMax(valueObject,value)
+  if value == 0 then
+    MIDI_MAX = 16383
+  else
+    MIDI_MAX = 127
+  end
+end
 
 -- Mod matrix first and last param numbers (0-based)
 local MOD_MATRIX_FIRST_PARAM = 54
@@ -101,26 +109,26 @@ end
 
 -- value formatters --
 function percent(valueObject,value) ---- 
-  return string.format ("%d %%", math.floor(100*value/16383))
+  return string.format ("%d %%", math.floor(100*value/MIDI_MAX))
 end
 
 -- -1 to + 1
 function oscFreq(valueObject,value)
-  return string.format ("%.2f", (2*value/16383 - 1))
+  return string.format ("%.2f", (2*value/MIDI_MAX - 1))
 end
 
 -- -100 to + 100
 function attenuverter(valueObject,value)
-  return string.format ("%d %%", math.floor((200*value/16383 - 100)))
+  return string.format ("%d %%", math.floor((200*value/MIDI_MAX - 100)))
 end
 
 -- -180 to + 180
 function phase(valueObject,value)
-  return string.format ("%.1f deg", math.floor((360*value/16383 - 180)))
+  return string.format ("%.1f deg", math.floor((360*value/MIDI_MAX - 180)))
 end
 
 function time(valueObject,value)
-  return string.format ("%.2f s", (10*value/16383))
+  return string.format ("%.2f s", (10*value/MIDI_MAX))
 end
 
 -- Convert number to a range with decimal numbers
@@ -131,7 +139,7 @@ end
 -- convert 0..16383 MIDI values to Seashell's lfo rate scale
 function lfoScale(valueObject,value)
   -- scale t0 [0,1]
-  local r = value/16383
+  local r = value/MIDI_MAX
   -- ensure median is a frequency of 5.0 
   local l = math.log(5.0 / C3_HZ) / math.log(0.5)
   -- frequency displayed
@@ -159,9 +167,9 @@ function adsrValueName(valueObject, value)
   local id = ctrl:getId()
   if not adsrBaseNames[id] then adsrBaseNames[id] = ctrl:getName() end
   if id ~= 5 then
-    ctrl:setName(adsrBaseNames[id] .. " " .. string.format("%.2f s", (10*value/16383)))
+    ctrl:setName(adsrBaseNames[id] .. " " .. string.format("%.2f s", (10*value/MIDI_MAX)))
   elseif id == 5 then
-    ctrl:setName(adsrBaseNames[id] .. " " .. string.format("%d %%", math.floor(100*value/16383)))
+    ctrl:setName(adsrBaseNames[id] .. " " .. string.format("%d %%", math.floor(100*value/MIDI_MAX)))
   end
   -- print ("ctl = "..id..", base Name = "..ahdsrBaseNames[id])
 end
@@ -336,7 +344,7 @@ local function lfoScaleReverse(freq)
   -- ensure median is a frequency of 5.0 
   local l = math.log(5.0 / C3_HZ) / math.log(0.5)
   -- implied 14-bit MIDI value 
-  local x = 16383*( (freq / C3_HZ)^(1.0 / l) )
+  local x = MIDI_MAX*( (freq / C3_HZ)^(1.0 / l) )
   return math.floor(x + 0.5) -- Round to nearest integer
 end
 
@@ -350,15 +358,15 @@ function math.round(x)
 end
 
 local function scale01(x)
-  return math.round(x * MIDI_14BIT_MAX)
+  return math.round(x * MIDI_MAX)
 end
 
 local function scaleSymmetric(x, min, max)
-  return math.round(((x - min) * MIDI_14BIT_MAX) / (max - min))
+  return math.round(((x - min) * MIDI_MAX) / (max - min))
 end
 
 local function scale0N(x, max)
-  return math.round((x * MIDI_14BIT_MAX) / max)
+  return math.round((x * MIDI_MAX) / max)
 end
 
 -- helper to convert seashell preset file into table of 96 scaled parameters 
@@ -392,7 +400,7 @@ local function parsePresetParameters(pm_raw)
   pm[25] = scale0N(pm[25], 100)
   pm[26] = scale0N(pm[26], 10)
   pm[34] = math.round(lfoScaleReverse(pm[34]))  -- lfo rate
-  pm[39] = math.round(((180+pm[39])*16383)/360) -- -180..180
+  pm[39] = math.round(((180+pm[39])*MIDI_MAX)/360) -- -180..180
   pm[44] = math.round(lfoScaleReverse(pm[44]))  -- random rate
   pm[48] = scale0N(pm[48], 100)
   pm[49] = scale0N(pm[49], 100)
@@ -404,14 +412,21 @@ local function parsePresetParameters(pm_raw)
   return pm
 end
 
--- helper function to send MSB on channel 14 and LSB on channel 15
+-- helper function to send 14-bit message (MSB on channel 14 and LSB on channel 15)
 local function send14BitCC(paramNum, value)
   value = math.floor(tonumber(value) or 0)
   local msb = math.floor(value / 128)
   local lsb = value % 128
   midi.sendControlChange(port, MSB_CHANNEL, paramNum, msb)
   midi.sendControlChange(port, LSB_CHANNEL, paramNum, lsb)
-  dprint(("CC14/15 sent: controller=%d msb=%d lsb=%d"):format(paramNum, msb, lsb))
+  dprint(("14-bit CC message sent: controller=%d msb=%d lsb=%d"):format(paramNum, msb, lsb))
+end
+
+-- helper function to send 7-bit CC on channel channel
+local function send7BitCC(paramNum, value)
+  value = math.floor(tonumber(value) or 0)
+  midi.sendControlChange(port, channel, paramNum, value)
+  dprint(("7-bit CC message sent: controller=%d value=%d"):format(paramNum, value))
 end
 
 -- Send a full 96-param preset (14-bit split to CC14/CC15)
@@ -608,6 +623,7 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
   local msg = valueObjects[1]:getMessage()
   if msg:getType() ~= PT_VIRTUAL then return end
   local pNum = msg:getParameterNumber()
+  local ctlId = valueObjects[1]:getControl():getId()
 
   -- keep RND_RATE locked to LFO_RATE when sync is enabled
   if pNum == SYNC_TO_LFO or pNum == LFO_RATE_TYPE
