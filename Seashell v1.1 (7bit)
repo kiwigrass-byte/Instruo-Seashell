@@ -60,61 +60,29 @@ local CTRL_DECAY_TIME = 4
 local CTRL_SUSTAIN_LEVEL = 5
 local CTRL_SYNC_TO_LFO = 99
 local CTRL_RND_RATE_TYPE = 91
-local CTRL_MOD_SOURCE_1 = {46,47,48,49}
-local CTRL_MOD_SOURCE_2 = {50,51,52,53}
-local CTRL_MOD_SOURCE_3 = {54,55,56,57}
-local CTRL_MOD_SOURCE_4 = {58,59,60,61}
+
+local CTRL_MOD_SOURCE = {
+  {46,47,48,49,117,118,119,120},
+  {50,51,52,53,123,124,125,126},
+  {54,55,56,57,129,130,131,132},
+  {58,59,60,61,135,136,137,138},
+}
 
 -- set color formatter for controls
 local orange = { off = 0x572700, on = ORANGE }
 
-function dimIt1(valueObject,value)
-  if value == 0 then
-    for i = 1,4 do
-      controls.get(CTRL_MOD_SOURCE_1[i]):setColor(orange.off)
-    end
-  else
-    for i = 1,4 do
-      controls.get(CTRL_MOD_SOURCE_1[i]):setColor(orange.on)
-    end
+local function dimGroup(groupIndex, value)
+  local ids = CTRL_MOD_SOURCE[groupIndex]
+  local color = (value == 0) and orange.off or orange.on
+  for i = 1, #ids do
+    controls.get(ids[i]):setColor(color)
   end
 end
 
-function dimIt2(valueObject,value)
-  if value == 0 then
-    for i = 1,4 do
-      controls.get(CTRL_MOD_SOURCE_2[i]):setColor(orange.off)
-    end
-  else
-    for i = 1,4 do
-      controls.get(CTRL_MOD_SOURCE_2[i]):setColor(orange.on)
-    end
-  end
-end
-
-function dimIt3(valueObject,value)
-  if value == 0 then
-    for i = 1,4 do
-      controls.get(CTRL_MOD_SOURCE_3[i]):setColor(orange.off)
-    end
-  else
-    for i = 1,4 do
-      controls.get(CTRL_MOD_SOURCE_3[i]):setColor(orange.on)
-    end
-  end
-end
-
-function dimIt4(valueObject,value)
-  if value == 0 then
-    for i = 1,4 do
-      controls.get(CTRL_MOD_SOURCE_4[i]):setColor(orange.off)
-    end
-  else
-    for i = 1,4 do
-      controls.get(CTRL_MOD_SOURCE_4[i]):setColor(orange.on)
-    end
-  end
-end
+function dimIt1(valueObject, value) dimGroup(1, value) end
+function dimIt2(valueObject, value) dimGroup(2, value) end
+function dimIt3(valueObject, value) dimGroup(3, value) end
+function dimIt4(valueObject, value) dimGroup(4, value) end
 
 -- Generic helper for two controls where one is the inverse of the other.
 local function setPairVisibility(firstControlId, secondControlId, showFirst)
