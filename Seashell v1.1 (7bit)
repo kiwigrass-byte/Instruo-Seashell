@@ -27,7 +27,6 @@ local PARAM_NUM = 96
 
 -- 7-bit profile
 local MIDI_MAX = 127
-local MIDI_SRC_MAX = 16383 -- used only when downscaling incoming Electra values if needed
 
 -- Mod matrix first and last param numbers (0-based)
 local MOD_MATRIX_FIRST_PARAM = 54
@@ -96,6 +95,15 @@ function updateRndVisibility(valueObject, value)
   -- normal (independent) mode: show type selector and the active value control
   controls.get(CTRL_RND_RATE_TYPE):setVisible(true)
   setPairVisibility(CTRL_RND_NOTE, CTRL_RND_RATE, rndMode == 127)
+end
+
+-- helper function to round to nearest integer
+function math.round(x)
+    if x >= 0 then
+        return math.floor(x + 0.5)
+    else
+        return math.ceil(x - 0.5)
+    end
 end
 
 -- value formatters --
@@ -361,16 +369,7 @@ local function lfoScaleReverse(freq)
   return math.floor(x + 0.5) -- Round to nearest integer
 end
 
--- helper function to round to nearest integer
-function math.round(x)
-    if x >= 0 then
-        return math.floor(x + 0.5)
-    else
-        return math.ceil(x - 0.5)
-    end
-end
-
-local function scale01(x) return math.round(x * MIDI_MAX) end
+-- scale display parameter value to 0..MIDI_MAX 
 local function scaleSymmetric(x, min, max) return math.round(((x - min) * MIDI_MAX) / (max - min)) end
 local function scale0N(x, max) return math.round((x * MIDI_MAX) / max) end
 
@@ -468,6 +467,7 @@ local function parsePresetParameters(pm_raw)
   end
   pm[95] = scale0N(pm[95], 100)
   pm[96] = map0N(pm[96],2)
+
   return pm
 end
 
