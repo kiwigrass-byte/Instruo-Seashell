@@ -381,7 +381,7 @@ local function scale0N(x, max) return round((x * MIDI_MAX) / max) end
   x = tonumber(x) or 0
   if x <= 0 then return 0 end
   if x >= max then return 127 end
-  return math.floor((x * MIDI_MAX) / max + 0.5)
+  return round((x * MIDI_MAX) / max)
 end
 
 -- map 1..N values to 0..127
@@ -389,7 +389,7 @@ local function map1N(x, max)
   x = tonumber(x) or 1
   if x <= 1 then return 0 end
   if x >= max then return 127 end
-  return math.floor(((x - 1) * 127) / (max - 1) + 0.5)
+  return round(((x - 1) * 127) / (max - 1))
 end
 
 -- helper to convert seashell preset file into table of 96 scaled parameters 
