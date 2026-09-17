@@ -19,7 +19,7 @@
 - Synth must be on at least fw 2.0 (August 2026)
 - **IMPORTANT:** The preset sends 7-bit parameter values and program change messages on MIDI channel 2. Change to match the MIDI channel on the Seashell. 
 
-- The preset assumes the MIDI parameter mapping in the Seashell app is in the exact order as listed from 0 to 94. 
+- The preset assumes the MIDI parameter mapping in the Seashell app is in the exact order as listed from 0 to 93. Note, monitor mix and pickup behavior are not controllable via 7-bit MIDI.
 
 ---
 **What's in the preset**
