@@ -104,8 +104,12 @@ function percent(valueObject,value) ----
 end
 
 -- -1 to + 1
-function oscFreq(valueObject,value)
-  return string.format ("%.2f", (2*value/MIDI_MAX - 1))
+function oscFreq(valueObject, value)
+  local displayed = 2 * value / MIDI_MAX - 1
+  if math.abs(displayed) < 0.01 then
+    displayed = 0
+  end
+  return string.format("%.2f", displayed)
 end
 
 -- -100 to + 100
@@ -158,7 +162,7 @@ function adsrValueName(valueObject, value)
   local id = ctrl:getId()
   if not adsrBaseNames[id] then adsrBaseNames[id] = ctrl:getName() end
   if id ~= 5 then
-    ctrl:setName(adsrBaseNames[id] .. " " .. string.format("%.2f s", (10*value/MIDI_MAX)))
+    ctrl:setName(adsrBaseNames[id] .. " " .. string.format("%.1f s", (10*value/MIDI_MAX)))
   elseif id == 5 then
     ctrl:setName(adsrBaseNames[id] .. " " .. string.format("%d %%", math.floor(100*value/MIDI_MAX)))
   end
@@ -689,3 +693,15 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
   end
 
 end
+
+-- labels for the 96 Seashell parameters (not used)
+local PARAM_NAMES =  {[0] = {"osc1frequency"}, {"osc2frequency"},  {"lfoonoff" },  {"octaverange"},  {"sync" }, {"1voctrouting"},  {"transpose" },  {"portamento" }, {"midipitchbend"}, {"wavefoldinput" },
+          {"folddepth" }, {"foldbias" },{"foldbiasanimate" }, {"pulsewidth" }, {"pwmanimate" }, {"animateonoff" }, {"waveformselect" }, {"filtercutoff" }, {"filterkeytrack" }, {"outputlevel" },
+          {"diffuseamount" }, {"envmode" }, {"envattack" }, {"envdecay" }, {"envsustain" }, {"envrelease" }, {"envshape" }, {"envgate" }, {"envretrigonoff" }, {"envtriggerbutton" }, {"envtriggerjack" },
+          {"envtriggernoteon" }, {"extend" }, {"lforate" }, {"lforatesubdivision" }, {"lfotimemode" }, {"lfomode" }, {"lfopolarity" }, {"lfophase" }, {"lfotriggerbutton" }, {"lfotriggerjack" }, {"lfotriggernoteon" },
+          {"rndlforatesync" }, {"rndrate" }, {"rndratesubdivision" }, {"rndtimemode" }, {"rndpolarity" }, {"rnddensity" }, {"rndsmoothing" },{"rndtriggerbutton" }, {"rndtriggerjack" },{"rndtriggernoteon" },
+          {"taptempoenable" }, {"macro" }, {"mxsource1" }, {"mxsource2" }, {"mxsource3" }, {"mxsource4" }, {"mxdesta" }, {"mxdestb" }, {"mxdestc" }, {"mxdestd" }, {"mxnode1a" }, {"mxnode1b" }, {"mxnode1c" },
+          {"mxnode1d" }, {"mxnode2a" }, {"mxnode2b" }, {"mxnode2c" }, {"mxnode2d" },{"mxnode3a" },{"mxnode3b" }, {"mxnode3c" },{"mxnode3d" },{"mxnode4a" },{"mxnode4b" },{"mxnode4c" },{"mxnode4d" },{"mxnode1alock" },
+          {"mxnode1block" },{"mxnode1clock" },{"mxnode1dlock" },{"mxnode2alock" },{"mxnode2block" },{"mxnode2clock" }, {"mxnode2dlock" },{"mxnode3alock" },{"mxnode3block" },{"mxnode3clock" },{"mxnode3dlock" },
+          {"mxnode4alock" }, {"mxnode4block" },{"mxnode4clock" },{"mxnode4dlock" },{"monitormix" },{"pickupbehaviour" },
+}
