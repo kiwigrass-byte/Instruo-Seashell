@@ -97,14 +97,6 @@ function updateRndVisibility(valueObject, value)
   setPairVisibility(CTRL_RND_NOTE, CTRL_RND_RATE, rndMode == 127)
 end
 
--- helper function to round to nearest integer
-function math.round(x)
-    if x >= 0 then
-        return math.floor(x + 0.5)
-    else
-        return math.ceil(x - 0.5)
-    end
-end
 
 -- value formatters --
 
@@ -374,17 +366,21 @@ local function lfoScaleReverse(freq)
   return math.floor(x + 0.5) -- Round to nearest integer
 end
 
--- scale display parameter value to 0..MIDI_MAX 
-local function scaleSymmetric(x, min, max) return math.round(((x - min) * MIDI_MAX) / (max - min)) end
-local function scale0N(x, max) return math.round((x * MIDI_MAX) / max) end
+-- helper function to round positive number to nearest integer
+local function round(x)
+    return math.floor(x + 0.5)
+end
 
--- map 0,1,..N values to corresponding 0..127 values
-local function map0N(x, max)
+-- scale display parameter value to 0..MIDI_MAX 
+local function scaleSymmetric(x, min, max) return round(((x - min) * MIDI_MAX) / (max - min)) end
+local function scale0N(x, max) return round((x * MIDI_MAX) / max) end
+
+ -- map 0,1,..N values to corresponding 0..127 values
+ local function map0N(x, max)
   x = tonumber(x) or 0
   if x <= 0 then return 0 end
   if x >= max then return 127 end
-  -- Reserve 127 for the maximum; evenly distribute intermediate states over 0..126.
-  return math.floor((x * 126) / max + 0.5)
+  return math.floor((x * MIDI_MAX) / max + 0.5)
 end
 
 -- map 1..N values to 0..127
@@ -442,17 +438,17 @@ local function parsePresetParameters(pm_raw)
   pm[31] = map0N(pm[31],1)
   pm[32] = map0N(pm[32],1)
   pm[33] = map0N(pm[33],1)
-  pm[34] = math.round(lfoScaleReverse(pm[34]))  -- lfo rate
+  pm[34] = round(lfoScaleReverse(pm[34]))  -- lfo rate
   pm[35] = map0N(pm[35],19)
   pm[36] = map0N(pm[36],1)
   pm[37] = map0N(pm[37],2)
   pm[38] = map0N(pm[38],1)
-  pm[39] = math.round(((180+pm[39])*MIDI_MAX)/360) -- -180..180
+  pm[39] = round(((180+pm[39])*MIDI_MAX)/360) -- -180..180
   pm[40] = map0N(pm[40],1)
   pm[41] = map0N(pm[41],1)
   pm[42] = map0N(pm[42],1)
   pm[43] = map0N(pm[43],1)
-  pm[44] = math.round(lfoScaleReverse(pm[44]))  -- random rate
+  pm[44] = round(lfoScaleReverse(pm[44]))  -- random rate
   pm[45] = map0N(pm[45],19)
   pm[46] = map0N(pm[46],1)
   pm[47] = map0N(pm[47],1)
@@ -698,15 +694,3 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
   end
 
 end
-
--- labels for the 96 Seashell parameters (not used)
-local PARAM_NAMES =  {[0] = {"osc1frequency"}, {"osc2frequency"},  {"lfoonoff" },  {"octaverange"},  {"sync" }, {"1voctrouting"},  {"transpose" },  {"portamento" }, {"midipitchbend"}, {"wavefoldinput" },
-          {"folddepth" }, {"foldbias" },{"foldbiasanimate" }, {"pulsewidth" }, {"pwmanimate" }, {"animateonoff" }, {"waveformselect" }, {"filtercutoff" }, {"filterkeytrack" }, {"outputlevel" },
-          {"diffuseamount" }, {"envmode" }, {"envattack" }, {"envdecay" }, {"envsustain" }, {"envrelease" }, {"envshape" }, {"envgate" }, {"envretrigonoff" }, {"envtriggerbutton" }, {"envtriggerjack" },
-          {"envtriggernoteon" }, {"extend" }, {"lforate" }, {"lforatesubdivision" }, {"lfotimemode" }, {"lfomode" }, {"lfopolarity" }, {"lfophase" }, {"lfotriggerbutton" }, {"lfotriggerjack" }, {"lfotriggernoteon" },
-          {"rndlforatesync" }, {"rndrate" }, {"rndratesubdivision" }, {"rndtimemode" }, {"rndpolarity" }, {"rnddensity" }, {"rndsmoothing" },{"rndtriggerbutton" }, {"rndtriggerjack" },{"rndtriggernoteon" },
-          {"taptempoenable" }, {"macro" }, {"mxsource1" }, {"mxsource2" }, {"mxsource3" }, {"mxsource4" }, {"mxdesta" }, {"mxdestb" }, {"mxdestc" }, {"mxdestd" }, {"mxnode1a" }, {"mxnode1b" }, {"mxnode1c" },
-          {"mxnode1d" }, {"mxnode2a" }, {"mxnode2b" }, {"mxnode2c" }, {"mxnode2d" },{"mxnode3a" },{"mxnode3b" }, {"mxnode3c" },{"mxnode3d" },{"mxnode4a" },{"mxnode4b" },{"mxnode4c" },{"mxnode4d" },{"mxnode1alock" },
-          {"mxnode1block" },{"mxnode1clock" },{"mxnode1dlock" },{"mxnode2alock" },{"mxnode2block" },{"mxnode2clock" }, {"mxnode2dlock" },{"mxnode3alock" },{"mxnode3block" },{"mxnode3clock" },{"mxnode3dlock" },
-          {"mxnode4alock" }, {"mxnode4block" },{"mxnode4clock" },{"mxnode4dlock" },{"monitormix" },{"pickupbehaviour" },
-}
