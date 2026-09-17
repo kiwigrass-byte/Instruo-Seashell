@@ -27,7 +27,7 @@
 - The **COMPARE TO PATCH** control allows switching between an edited sound (and UI) and the original patch sound (and UI). Very useful! 
 - Mimics the layout and most features of the Seashell app.
 - Hides controls when not available.
-- The Seashell app will update with parameter changes made on the E1.
+- The Seashell app will update with parameter changes made on the E1 if the E1 is set as an active MIDI input. The quantization of 0..127 MIDI values means the E1 displayed parameter values won't always match exactly what is displayed in the app. 
 ---
 **What's not in the preset**
 - Patch saving.   
