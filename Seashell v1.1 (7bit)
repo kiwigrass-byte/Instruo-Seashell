@@ -44,6 +44,7 @@ local LFO_RATE = 33
 local RND_RATE = 43
 local LFO_NOTE = 34
 local RND_NOTE = 44
+
 -- virtual parameter numbers
 local COMPARE_IT = 10010 -- comparison of edited and patch parameter values
 local SELECT_IT = 10011 -- patch selector param
@@ -59,6 +60,61 @@ local CTRL_DECAY_TIME = 4
 local CTRL_SUSTAIN_LEVEL = 5
 local CTRL_SYNC_TO_LFO = 99
 local CTRL_RND_RATE_TYPE = 91
+local CTRL_MOD_SOURCE_1 = {46,47,48,49}
+local CTRL_MOD_SOURCE_2 = {50,51,52,53}
+local CTRL_MOD_SOURCE_3 = {54,55,56,57}
+local CTRL_MOD_SOURCE_4 = {58,59,60,61}
+
+-- set color formatter for controls
+local orange = { off = 0x505000, on = ORANGE }
+
+function dimIt1(valueObject,value)
+  if value == 0 then
+    for i = 1,4 do
+      controls.get(CTRL_MOD_SOURCE_1[i]):setColor(orange.off)
+    end
+  else
+    for i = 1,4 do
+      controls.get(CTRL_MOD_SOURCE_1[i]):setColor(orange.on)
+    end
+  end
+end
+
+function dimIt2(valueObject,value)
+  if value == 0 then
+    for i = 1,4 do
+      controls.get(CTRL_MOD_SOURCE_2[i]):setColor(orange.off)
+    end
+  else
+    for i = 1,4 do
+      controls.get(CTRL_MOD_SOURCE_2[i]):setColor(orange.on)
+    end
+  end
+end
+
+function dimIt3(valueObject,value)
+  if value == 0 then
+    for i = 1,4 do
+      controls.get(CTRL_MOD_SOURCE_3[i]):setColor(orange.off)
+    end
+  else
+    for i = 1,4 do
+      controls.get(CTRL_MOD_SOURCE_3[i]):setColor(orange.on)
+    end
+  end
+end
+
+function dimIt4(valueObject,value)
+  if value == 0 then
+    for i = 1,4 do
+      controls.get(CTRL_MOD_SOURCE_4[i]):setColor(orange.off)
+    end
+  else
+    for i = 1,4 do
+      controls.get(CTRL_MOD_SOURCE_4[i]):setColor(orange.on)
+    end
+  end
+end
 
 -- Generic helper for two controls where one is the inverse of the other.
 local function setPairVisibility(firstControlId, secondControlId, showFirst)
@@ -217,6 +273,7 @@ function modSource(valueObject, value)
   return "Source " .. tostring(value)
 end
 
+------------------------------------- preset parsing block ---------------------------
 -- Seashell xml preset files:
 local PRESETS = {
   [0] = { name = "Initial",   raw = [[
@@ -392,7 +449,7 @@ local function map1N(x, max)
   return round(((x - 1) * 127) / (max - 1))
 end
 
--- helper to convert seashell preset file into table of 96 scaled parameters 
+-- helper to convert seashell preset file into table of 94 scaled parameters 
 local function parsePresetParameters(pm_raw)
   local pm = {}
   for value in pm_raw:gmatch('value%s*=%s*"([^"]+)"') do
@@ -401,11 +458,7 @@ local function parsePresetParameters(pm_raw)
       pm[#pm + 1] = n
     end
   end
-  -- Safety check: Seashell preset should give 96 PARAM values
-  if #pm ~= PARAM_NUM then
-    error(("Preset to Param: expected 96 params, got %d (input may be truncated)"):format(#pm))
-  end
-  -- convert non-0/1 scaled parameter values to 14-bit numbers
+  -- convert preset parameter values to 7-bit MIDI values
   pm[1]  = scaleSymmetric(pm[1], -1, 1) -- -1..1
   pm[2]  = scaleSymmetric(pm[2], -1, 1)
   pm[3]  = map0N(pm[3],1)
@@ -473,6 +526,14 @@ local function parsePresetParameters(pm_raw)
   return pm
 end
 
+-- Set parameters from pasred preset
+local function applyPresetParameters(pm)
+  for i = 1, #pm do
+    local v = pm[i] or 0
+    parameterMap.set(deviceId, PT_VIRTUAL, i-1, v)
+  end
+end
+
 -- helper function to send 7-bit CC on channel channel
 local function sendCC(paramNum, value)
   local v = math.floor(tonumber(value) or 0)
@@ -480,15 +541,6 @@ local function sendCC(paramNum, value)
     error(("Invalid 7-bit value %d for CC %d"):format(v, paramNum))
   end
   midi.sendControlChange(port, channel, paramNum, v)
-end
-
--- Send a full 96-param preset (14-bit split to CC14/CC15)
-local function applyPresetParameters(pm)
-  for i = 1, #pm do
-    local v = pm[i] or 0
-    parameterMap.set(deviceId, PT_VIRTUAL, i-1, v)
-    sendCC(i-1, v)
-  end
 end
 
 -- set parameters and send CCs to reset mod matrix to match init patch
