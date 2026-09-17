@@ -66,7 +66,7 @@ local CTRL_MOD_SOURCE_3 = {54,55,56,57}
 local CTRL_MOD_SOURCE_4 = {58,59,60,61}
 
 -- set color formatter for controls
-local orange = { off = 0x505000, on = ORANGE }
+local orange = { off = 0x572700, on = ORANGE }
 
 function dimIt1(valueObject,value)
   if value == 0 then
