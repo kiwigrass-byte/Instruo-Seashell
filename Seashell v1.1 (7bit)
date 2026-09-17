@@ -17,7 +17,6 @@ events.subscribe(POTS|PAGES) -- for pot touch help and on release, and start on 
 
 function preset.onLoad()
   pages.display(1)
-  initMatrixDim()
 end
 
 --------- Global Constants---------------
@@ -118,17 +117,6 @@ function dimCol2(valueObject, value) setColZero(2, value) end
 function dimCol3(valueObject, value) setColZero(3, value) end
 function dimCol4(valueObject, value) setColZero(4, value) end
 
-
--- Optional: call this once at preset load to sync dim state to current values
-function initMatrixDim()
-  for row = 1, 4 do
-    rowIsZero[row] = (parameterMap.get(deviceId, PT_VIRTUAL, MOD_SOURCE_PARAM[row]) == 0)
-  end
-  for col = 1, 4 do
-    colIsZero[col] = (parameterMap.get(deviceId, PT_VIRTUAL, MOD_DEST_PARAM[col]) == 0)
-  end
-  repaintMatrix()
-end
 
 -- Generic helper for two controls where one is the inverse of the other.
 local function setPairVisibility(firstControlId, secondControlId, showFirst)
