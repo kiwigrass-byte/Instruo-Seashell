@@ -357,19 +357,20 @@ function formatPresetName(valueObject, value)
   return "Preset " .. tostring(value)
 end
 
+-- helper function to round positive number to nearest integer
+local function round(x)
+    return math.floor(x + 0.5)
+end
+
 -- helper for converting scaled lfo rates to 0-127 values
 local function lfoScaleReverse(freq)
   -- ensure median is a frequency of 5.0 
   local l = math.log(5.0 / C3_HZ) / math.log(0.5)
   -- implied 14-bit MIDI value 
   local x = MIDI_MAX*( (freq / C3_HZ)^(1.0 / l) )
-  return math.floor(x + 0.5) -- Round to nearest integer
+  return round(x) -- Round to nearest integer
 end
 
--- helper function to round positive number to nearest integer
-local function round(x)
-    return math.floor(x + 0.5)
-end
 
 -- scale display parameter value to 0..MIDI_MAX 
 local function scaleSymmetric(x, min, max) return round(((x - min) * MIDI_MAX) / (max - min)) end
