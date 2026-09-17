@@ -107,11 +107,14 @@ function math.round(x)
 end
 
 -- value formatters --
+
+-- MIDI values to 0 to 100%
 function percent(valueObject,value) ---- 
-  return string.format ("%d %%", math.floor(100*value/MIDI_MAX))
+  local displayed = 100 * value / MIDI_MAX
+  return string.format ("%.0f %%", displayed)
 end
 
--- -1 to + 1
+-- MIDI values to -1 to + 1
 function oscFreq(valueObject, value)
   local displayed = 2 * value / MIDI_MAX - 1
   if math.abs(displayed) < 0.01 then
@@ -120,26 +123,28 @@ function oscFreq(valueObject, value)
   return string.format("%.2f", displayed)
 end
 
--- -100 to + 100
+-- MIDI values to -100 to + 100
 function attenuverter(valueObject,value)
-  return string.format ("%d %%", math.floor((200*value/MIDI_MAX - 100)))
+  local displayed = 200 * value / MIDI_MAX - 100
+  if math.abs(displayed) < 1 then
+    displayed = 0
+  end
+  return string.format("%.0f %%", displayed)
 end
 
--- -180 to + 180
+-- MIDI values to -180 to + 180deg
 function phase(valueObject,value)
-  return string.format ("%.1f deg", math.floor((360*value/MIDI_MAX - 180)))
+  local displayed = 360 * value / MIDI_MAX - 180
+  return string.format("%.1f deg", displayed)
 end
 
+-- MIDI values to 0 to 10s
 function time(valueObject,value)
-  return string.format ("%.2f s", (10*value/MIDI_MAX))
+  local displayed = 10 * value / MIDI_MAX
+  return string.format ("%.2f s", displayed)
 end
 
--- Convert number to a range with decimal numbers
-function convertToFractions (valueObject, value)
-    return (string.format("%.1f", value / 20))
-end
-
--- convert 0..16383 MIDI values to Seashell's lfo rate scale
+-- MIDI values to lfo rate scale (0 to 130Hz)
 function lfoScale(valueObject,value)
   -- scale t0 [0,1]
   local r = value/MIDI_MAX
