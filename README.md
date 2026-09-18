@@ -15,7 +15,7 @@
 - Patch saving. 
 ---
 # Instruo Seashell preset for Electra One mk2 MIDI controller with patch loading and comparison mode (7bit version)
-
+##fix note sync to 0..18 options not 0..19
 - Synth must be on at least fw 2.0 (August 2026)
 - **IMPORTANT:** The preset sends 7-bit parameter values and program change messages on MIDI channel 2. Change to match the MIDI channel on the Seashell. 
 
