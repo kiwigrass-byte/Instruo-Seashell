@@ -48,7 +48,8 @@ local RND_NOTE = 44
 -- synth parameter numbers for the 4x4 mod matrix row sources and column destinations
 local MOD_SOURCE_PARAM = {54, 55, 56, 57}       -- row source param numbers
 local MOD_DEST_PARAM   = {58, 59, 60, 61}       -- column destination param numbers
-local MOD_AMOUNT_PARAM = {62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 78}  -- 4x4 nodes ordered by row 
+-- synth parameter numbers for the mod matrix amount cells (row-major, 4x4)
+local MOD_AMOUNT_PARAM = {62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77}
 
 -- virtual parameter numbers
 local COMPARE_IT = 10010 -- comparison of edited and patch parameter values
@@ -77,15 +78,21 @@ local CTRL_MATRIX_CELL = {
 
 local orange = { off = 0x572700, on = ORANGE }
 
--- Cached row/col zero-states so we only need the changed param to trigger a
+-- Cached row/col/cell zero-states so we only need the changed param to trigger a
 -- full-matrix repaint (cheap: at most 16 cells).
 local rowIsZero = {false, false, false, false}
 local colIsZero = {false, false, false, false}
+local cellIsZero = {
+  {false, false, false, false},
+  {false, false, false, false},
+  {false, false, false, false},
+  {false, false, false, false},
+}
 
 local function repaintMatrix()
   for row = 1, 4 do
     for col = 1, 4 do
-      local dim = rowIsZero[row] or colIsZero[col]
+      local dim = rowIsZero[row] or colIsZero[col] or cellIsZero[row][col]
       local color = dim and orange.off or orange.on
       local ids = CTRL_MATRIX_CELL[row][col]
       for i = 1, #ids do
@@ -107,7 +114,14 @@ local function setColZero(col, value)
   repaintMatrix()
 end
 
--- binding callback to controls
+-- helper to bind to mod-amount controls (params 62-76,78). MIDI value 64
+-- displays as 0% on the attenuverter scale, so treat 64 as "zero".
+local function setCellZero(row, col, value)
+  cellIsZero[row][col] = (value == 64)
+  repaintMatrix()
+end
+
+-- callbacks to dim mod matrix nodes
 function dimRow1(valueObject, value) setRowZero(1, value) end
 function dimRow2(valueObject, value) setRowZero(2, value) end
 function dimRow3(valueObject, value) setRowZero(3, value) end
@@ -118,6 +132,27 @@ function dimCol2(valueObject, value) setColZero(2, value) end
 function dimCol3(valueObject, value) setColZero(3, value) end
 function dimCol4(valueObject, value) setColZero(4, value) end
 
+-- one dim function per mod-matrix amount cell, row-major order matching
+-- MOD_AMOUNT_PARAM / CTRL_MATRIX_CELL
+function dimAmt11(valueObject, value) setCellZero(1, 1, value) end
+function dimAmt12(valueObject, value) setCellZero(1, 2, value) end
+function dimAmt13(valueObject, value) setCellZero(1, 3, value) end
+function dimAmt14(valueObject, value) setCellZero(1, 4, value) end
+
+function dimAmt21(valueObject, value) setCellZero(2, 1, value) end
+function dimAmt22(valueObject, value) setCellZero(2, 2, value) end
+function dimAmt23(valueObject, value) setCellZero(2, 3, value) end
+function dimAmt24(valueObject, value) setCellZero(2, 4, value) end
+
+function dimAmt31(valueObject, value) setCellZero(3, 1, value) end
+function dimAmt32(valueObject, value) setCellZero(3, 2, value) end
+function dimAmt33(valueObject, value) setCellZero(3, 3, value) end
+function dimAmt34(valueObject, value) setCellZero(3, 4, value) end
+
+function dimAmt41(valueObject, value) setCellZero(4, 1, value) end
+function dimAmt42(valueObject, value) setCellZero(4, 2, value) end
+function dimAmt43(valueObject, value) setCellZero(4, 3, value) end
+function dimAmt44(valueObject, value) setCellZero(4, 4, value) end
 
 -- Generic helper for two controls where one is the inverse of the other.
 local function setPairVisibility(firstControlId, secondControlId, showFirst)
