@@ -496,6 +496,7 @@ local function parsePresetParameters(pm_raw)
       pm[#pm + 1] = n
     end
   end
+
   -- convert preset parameter values to 7-bit MIDI values
   pm[1]  = scaleSymmetric(pm[1], -1, 1) -- -1..1
   pm[2]  = scaleSymmetric(pm[2], -1, 1)
@@ -766,7 +767,6 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
   local msg = valueObjects[1]:getMessage()
   if msg:getType() ~= PT_VIRTUAL then return end
   local pNum = msg:getParameterNumber()
-  local ctlId = valueObjects[1]:getControl():getId()
 
   -- keep RND_RATE locked to LFO_RATE when sync is enabled
   if pNum == SYNC_TO_LFO or pNum == LFO_RATE_TYPE
