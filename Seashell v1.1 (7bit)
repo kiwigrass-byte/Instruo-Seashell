@@ -221,6 +221,9 @@ end
 -- MIDI values to -180 to + 180deg
 function phase(valueObject,value)
   local displayed = 360 * value / MIDI_MAX - 180
+  if math.abs(displayed) < 2 then
+    displayed = 0
+  end
   return string.format("%.1f deg", displayed)
 end
 
@@ -532,7 +535,7 @@ local function parsePresetParameters(pm_raw)
   pm[32] = map0N(pm[32],1)
   pm[33] = map0N(pm[33],1)
   pm[34] = round(lfoScaleReverse(pm[34]))  -- lfo rate
-  pm[35] = map0N(pm[35],19)
+  pm[35] = map0N(pm[35],18)
   pm[36] = map0N(pm[36],1)
   pm[37] = map0N(pm[37],2)
   pm[38] = map0N(pm[38],1)
@@ -542,7 +545,7 @@ local function parsePresetParameters(pm_raw)
   pm[42] = map0N(pm[42],1)
   pm[43] = map0N(pm[43],1)
   pm[44] = round(lfoScaleReverse(pm[44]))  -- random rate
-  pm[45] = map0N(pm[45],19)
+  pm[45] = map0N(pm[45],18)
   pm[46] = map0N(pm[46],1)
   pm[47] = map0N(pm[47],1)
   pm[48] = scale0N(pm[48], 100)
