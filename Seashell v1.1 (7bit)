@@ -163,6 +163,72 @@ function dimAmt42(valueObject, value) setCellZero(4, 2, value) end
 function dimAmt43(valueObject, value) setCellZero(4, 3, value) end
 function dimAmt44(valueObject, value) setCellZero(4, 4, value) end
 
+-- Waveform-dependent dimming.
+-- WAVEFORM is a list control: its callback value is the list INDEX (0-7),
+-- not the scaled 7-bit MIDI value the parameter stores.
+-- index -> MIDI: 0->0, 1->18, 2->36, 3->54, 4->73, 5->91, 6->109, 7->127
+ local WAVEFOLDER_DIM_WAVEFORMS = {
+  [1] = true, -- MIDI 18
+  [3] = true, -- MIDI 54
+  [5] = true, -- MIDI 91
+  [6] = true, -- MIDI 109
+  [7] = true, -- MIDI 127
+ }
+ 
+ local PWM_DIM_WAVEFORMS = {
+  [1] = true, -- MIDI 18
+  [2] = true, -- MIDI 36
+  [4] = true, -- MIDI 73
+  [5] = true, -- MIDI 91
+  [7] = true, -- MIDI 127
+ }
+
+local waveformDimsWavefolder = false
+local waveformDimsPwm = false
+local fixedRateLfoIsZero = false
+
+local function setControlColor(controlId, dim)
+  controls.get(controlId):setColor(dim and orange.off or orange.on)
+end
+
+local function repaintWaveformControls()
+  -- WAVEFORM dominates FIXED_RATE_LFO: the fixed-rate condition can
+  -- additionally dim the last controls, but can never undim them.
+  local wavefolderDim = waveformDimsWavefolder
+  local pwmDim = waveformDimsPwm
+
+  for i = 1, #CTRL_WAVEFOLDER do
+    local dim = wavefolderDim
+    if i == 4 then
+      dim = dim or fixedRateLfoIsZero
+    end
+    setControlColor(CTRL_WAVEFOLDER[i], dim)
+  end
+
+  for i = 1, #CTRL_PWM do
+    local dim = pwmDim
+    if i == 2 then
+      dim = dim or fixedRateLfoIsZero
+    end
+    setControlColor(CTRL_PWM[i], dim)
+  end
+end
+
+-- Dim wavefolder controls for selected waveform values.
+function dimWaveFolder(valueObject, value)
+  local waveform = math.floor(tonumber(value) or -1)
+  waveformDimsWavefolder = WAVEFOLDER_DIM_WAVEFORMS[waveform] == true
+  waveformDimsPwm = PWM_DIM_WAVEFORMS[waveform] == true
+  repaintWaveformControls()
+end
+
+-- With FIXED_RATE_LFO at zero, only the fourth wavefolder control and
+-- second PWM control are dimmed.
+function dimFixedRateLfo(valueObject, value)
+  fixedRateLfoIsZero = (tonumber(value) or -1) == 0
+  repaintWaveformControls()
+end
+
 -- Generic helper for two controls where one is the inverse of the other.
 local function setPairVisibility(firstControlId, secondControlId, showFirst)
   controls.get(firstControlId):setVisible(showFirst)
