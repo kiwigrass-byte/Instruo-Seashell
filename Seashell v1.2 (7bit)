@@ -536,15 +536,12 @@ local function parsePresetParameters(pm_raw)
   for i = 79,94 do
     pm[i] = map0N(pm[i],1)
   end
-  pm[95] = scale0N(pm[95], 100)
-  pm[96] = map0N(pm[96],2)
-
   return pm
 end
 
 -- Set parameters from pasred preset
 local function applyPresetParameters(pm)
-  for i = 1, #pm do
+  for i = 1, #pm-2 do -- there is no MIDI CC for the last 2 preset params (monitor mix, control behavior)
     local v = pm[i] or 0
     if v > 16383 then print("pNum = "..i) end
     parameterMap.set(deviceId, PT_VIRTUAL, i-1, v)
@@ -1061,7 +1058,7 @@ end
 
 -- ---------------- Macro LFO rate control ----------------
 
-local LFO_RATE_MIN_MS = 300
+local LFO_RATE_MIN_MS = 4000
 local LFO_RATE_MAX_MS = 20000
 
 -- value: 0-255, logarithmic mapping to period in milliseconds
