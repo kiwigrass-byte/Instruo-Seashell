@@ -546,6 +546,7 @@ end
 local function applyPresetParameters(pm)
   for i = 1, #pm do
     local v = pm[i] or 0
+    if v > 16383 then print("pNum = "..i) end
     parameterMap.set(deviceId, PT_VIRTUAL, i-1, v)
   end
 end
@@ -557,23 +558,6 @@ local function sendCC(paramNum, value)
     error(("Invalid 7-bit value %d for CC %d"):format(v, paramNum))
   end
   midi.sendControlChange(port, channel, paramNum, v)
-end
-
--- set parameters and send CCs to reset mod matrix to match init patch
-function resetIt(valueObject,value)
-  if value == 0 then return end
-  local preset = PRESETS[0]
-  if not preset then
-    dprint("RESET_IT: unknown preset index " .. tostring(value))
-    return
-  end
-  local pm = parsePresetParameters(preset.raw)
-  for i = MOD_MATRIX_FIRST_PARAM, MOD_MATRIX_LAST_PARAM do
-    local v = pm[i+1] or 0
-    parameterMap.set(deviceId, PT_VIRTUAL, i, v)
-    sendCC(i, v)
-  end  
-  dprint("Reset Mod Matrix")
 end
 
 --------- block to handle sync of random rate/notes to lfo rate/notes ---------------------
@@ -620,10 +604,10 @@ end
 
 -- ---------------- Mod amount macro bipolar scaling ----------------
 local PARAM_MACRO_KNOB = 10038
-local MACRO_MAX = 16383
-local MACRO_CENTER = 8192
+local MACRO_MAX = 255
+local MACRO_CENTER = 128
 
-local macroKnobValue = 16383   -- default = full effect (factor 1)
+local macroKnobValue = 255   -- default = full effect (factor 1)
 local macroApplying = false    -- guard so applyMacroToAll doesn't re-derive base
 
 local function macroFactor()
@@ -1162,6 +1146,24 @@ function macroLfoWaveChange(valueObject, value)
   )
 end
 
+-- set parameters and send CCs to reset mod matrix to match init patch
+function resetIt(valueObject,value)
+  if value == 0 then return end
+  local preset = PRESETS[0]
+  if not preset then
+    dprint("RESET_IT: unknown preset index " .. tostring(value))
+    return
+  end
+  local pm = parsePresetParameters(preset.raw)
+  for i = MOD_MATRIX_FIRST_PARAM, MOD_MATRIX_LAST_PARAM do
+    local v = pm[i+1] or 0
+    parameterMap.set(deviceId, PT_VIRTUAL, i, v)
+    sendCC(i, v)
+  end  
+  dprint("Reset Mod Matrix")
+  captureMacroBaseA()
+end
+
 -------------------- Patch selector on knob release ----------------------------------
 
 -- activeTouchedControlId holds which of the control knobs was touched (HT @oldgearguy)
@@ -1197,6 +1199,7 @@ function events.onPotTouchChange(potId, controlId, touched)
     end
     -- send patch parameter values to Seashell
     applyPresetParameters(pm)
+    captureMacroBaseA()
 
     -- send a program change to the Seashell as well (so Seashell app also stays in sync)
     midi.sendProgramChange(port, channel, index)
@@ -1222,20 +1225,36 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
   if msg:getType() ~= PT_VIRTUAL then return end
   local pNum = msg:getParameterNumber()
 
-  -- macro knob moved: rescale all 16 amounts, don't CC the macro itself
+  -- Macro LFO enable toggle (0 = off, 1 = unipolar, 2 = bipolar)
+  if pNum == PARAM_MACRO_LFO then
+    if midiValue == MACRO_LFO_OFF then
+      stopMacroLfo()
+    else
+      startMacroLfo(midiValue)
+    end
+    return
+  end
+
+  -- Macro LFO waveform
+  if pNum == PARAM_MACRO_LFO_WAVE then
+    macroLfoWaveChange(valueObjects[1], midiValue)
+    return
+  end
+
+  -- Macro knob moved: rescale all 16 amounts, don't re-send the macro itself
   if pNum == PARAM_MACRO_KNOB then
     macroKnobValue = math.max(0, math.min(MACRO_MAX, midiValue))
     applyMacroToAll()
     return
   end
 
-  -- lock toggles
+  -- Lock toggles
   if PARAM_MOD_LOCK_INDEX[pNum] then
     lockToggle(valueObjects[1], midiValue)
     return
   end
 
-  -- keep base in sync when user (or macro) touches a mod-amount control
+  -- keep macro base in sync when user (or macro) touches a mod-amount control
   local amtIdx = PARAM_MOD_AMOUNT_INDEX[pNum]
   if amtIdx and not macroApplying and not compareApplying then
     local factor = macroFactor()
