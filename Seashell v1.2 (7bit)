@@ -19,15 +19,14 @@ local port      = currentDevice:getPort ()
 local authorDate = "kiwigrass 2026" -- populate the bottom RH screen information display on load
 info.setText(authorDate)
 
-events.subscribe(POTS|PAGES) -- for pot touch help and on release, and start on main page
+events.subscribe(POTS|PAGES) 
 
 function preset.onLoad()
   pages.display(1)
 end
 
 --------- Global Constants---------------
-local TIMER_PERIOD_MS = 500
-local TIMER_DISPLAY_TICKS = 4
+
 -- number of MIDI parameters on Seashell
 local PARAM_NUM = 96 
 
@@ -58,7 +57,7 @@ local MOD_DEST_PARAM   = {58, 59, 60, 61}       -- column destination param numb
 local MOD_AMOUNT_PARAM = {62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77}
 
 -- virtual parameter numbers
-local COMPARE_IT = 10010 -- comparison of edited and patch parameter values
+local PARAM_COMPARE_IT = 10010 -- comparison of edited and patch parameter values
 local SELECT_IT = 10011 -- patch selector param
 
 -- control id numbers
@@ -269,31 +268,6 @@ function adsrValueName(valueObject, value)
     ctrl:setName(adsrBaseNames[id] .. " " .. string.format("%d %%", math.floor(100*value/MIDI_MAX)))
   end
   -- print ("ctl = "..id..", base Name = "..ahdsrBaseNames[id])
-end
-
--- HELP_TEXTS: keyed table for fast lookup in events.onPotTouchChange
-local HELP_TEXTS = {
-  [105]   = "shift + tap Sync",   [31]  = "shift + 1V/Oct",   [29]  = "shift + LF",   [18]  = "shift + press Gate/Trig",   
-  [17]  = "shift + hold Gate/Trg",  
-}
-
--- starting and stopping the timer for displaying names and help text
-timer.setPeriod(TIMER_PERIOD_MS) -- Set timer tick rate (e.g., every 500 milliseconds)
-
-local infoDisplayTicks = 0  -- Tracks how many ticks have passed for the timer.onTick function
-
-function timer.onTick()
-  infoDisplayTicks = infoDisplayTicks + 1
-  if infoDisplayTicks > TIMER_DISPLAY_TICKS then
-    timer.disable()
-    info.setText(authorDate)
-  end
-end
-
-local function showHelp(helpText)
-  info.setText(helpText)
-  infoDisplayTicks = 0
-  timer.enable()
 end
 
 local MOD_SOURCE = {
@@ -643,6 +617,128 @@ local function applyRndLfoSync()
   end
   syncingRndToLfo = false
 end
+
+-- ---------------- Mod amount macro bipolar scaling ----------------
+local PARAM_MACRO_KNOB = 10038
+local MACRO_MAX = 16383
+local MACRO_CENTER = 8192
+
+local macroKnobValue = 16383   -- default = full effect (factor 1)
+local macroApplying = false    -- guard so applyMacroToAll doesn't re-derive base
+
+local function macroFactor()
+  if macroKnobValue == MACRO_CENTER then
+    return 0
+  elseif macroKnobValue < MACRO_CENTER then
+    return (macroKnobValue - MACRO_CENTER) / MACRO_CENTER
+  else
+    return (macroKnobValue - MACRO_CENTER) / (MACRO_MAX - MACRO_CENTER)
+  end
+end
+
+-- reuse the mod-amount param numbers already defined for the matrix
+local PARAM_MOD_AMOUNT = MOD_AMOUNT_PARAM   -- {62..77}
+local PARAM_MOD_AMOUNT_INDEX = {}
+for i, p in ipairs(PARAM_MOD_AMOUNT) do PARAM_MOD_AMOUNT_INDEX[p] = i end
+
+local modAmountBase = {}
+for i = 1, 16 do modAmountBase[i] = 64 end
+
+local function scaledAmount(base, factor)
+  local v = 64 + (base - 64) * factor
+  v = math.floor(v + 0.5)
+  if v < 0 then v = 0 elseif v > 127 then v = 127 end
+  return v
+end
+
+function displayMacroPercent(valueObject, value)
+  local factor
+  if value == MACRO_CENTER then
+    factor = 0
+  elseif value < MACRO_CENTER then
+    factor = (value - MACRO_CENTER) / MACRO_CENTER
+  else
+    factor = (value - MACRO_CENTER) / (MACRO_MAX - MACRO_CENTER)
+  end
+  return string.format("%+d %%", math.floor(factor * 100 + 0.5))
+end
+
+-- ---------------- Mod amount lock toggles ----------------
+-- params 78-93 are currently unused by Seashell -> repurpose as the 16 locks
+local PARAM_MOD_LOCK = {78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93}
+-- reuse the lock-button control ids already wired into CTRL_MATRIX_CELL
+local CTRL_MOD_LOCK = {117,118,119,120,123,124,125,126,129,130,131,132,135,136,137,138}
+
+local PARAM_MOD_LOCK_INDEX = {}
+for i, p in ipairs(PARAM_MOD_LOCK) do PARAM_MOD_LOCK_INDEX[p] = i end
+
+local modAmountLocked = {}
+for i = 1, 16 do modAmountLocked[i] = false end
+
+-- NOTE: Seashell's repaintMatrix() already recolors BOTH knob+lock ids
+-- together based on rowIsZero/colIsZero/cellIsZero. Locking is a distinct
+-- concept, so give the lock button its own color independent of dimming:
+-- comment out the lock-id loop inside repaintMatrix() and let lockToggle()
+-- own that control's color exclusively (see patch note below).
+local lockColors = { off = 0x572700, on = ORANGE }
+
+function lockToggle(valueObject, value)
+  local parameter = valueObject:getMessage():getParameterNumber()
+  local idx = PARAM_MOD_LOCK_INDEX[parameter]
+  if not idx then return value end
+
+  modAmountLocked[idx] = (value ~= 0)
+  local ctrl = controls.get(CTRL_MOD_LOCK[idx])
+  if ctrl then
+    ctrl:setColor(modAmountLocked[idx] and lockColors.on or lockColors.off)
+  end
+  return value
+end
+
+local function applyMacroToAll(factorOverride, ignoreLocks)
+  macroApplying = true
+  local factor = factorOverride or macroFactor()
+
+  for i = 1, 16 do
+    if modAmountBase[i] ~= 64 then
+      local isLocked = modAmountLocked[i]
+      if ignoreLocks or not isLocked then
+        local newValue = scaledAmount(modAmountBase[i], factor)
+        local current = parameterMap.get(deviceId, PT_VIRTUAL, PARAM_MOD_AMOUNT[i])
+        if current ~= newValue then
+          parameterMap.set(deviceId, PT_VIRTUAL, PARAM_MOD_AMOUNT[i], newValue)
+          sendCC(PARAM_MOD_AMOUNT[i], newValue)   -- Seashell's 7-bit sender, not sendSimpleNRPN
+        end
+      end
+    end
+  end
+
+  macroApplying = false
+end
+
+-- ---------------- macro base snapshots for A/B compare ----------------
+local macroBaseSnapshotA = nil
+local macroBaseSnapshotB = nil
+local compareApplying = false
+local comparingActive = false
+
+local function copyModAmountBase(src)
+  local t = {}
+  for i = 1, 16 do t[i] = (src and src[i]) or 64 end
+  return t
+end
+
+-- call this once, right after a preset is parsed/applied (SELECT_IT and
+-- resetIt already do applyPresetParameters(pm) — add a call to this there)
+local function captureMacroBaseA()
+  for i = 1, 16 do
+    modAmountBase[i] = parameterMap.get(deviceId, PT_VIRTUAL, PARAM_MOD_AMOUNT[i]) or 64
+  end
+  macroBaseSnapshotA = copyModAmountBase(modAmountBase)
+  macroBaseSnapshotB = nil
+  comparingActive = false
+end
+
 ------------------ COMPARE_IT toggle block -----------------------------------
 -- value 1: cache edited state (B), recall unedited baseline (A)
 -- value 0: recall cached edited state (B)
@@ -672,6 +768,7 @@ local compareLatched = false
 
 function compareIt(valueObject, value)
   local v = math.floor(tonumber(value) or 0)
+  compareApplying = true
 
   if v == 1 then
     if not compareLatched then
@@ -679,33 +776,390 @@ function compareIt(valueObject, value)
         compareUneditedPM = snapshotCurrentPM()
       end
       compareEditedPM = snapshotCurrentPM()
-
-      dprint(("COMPARE cache set; p1=%d p2=%d p34=%d"):format(
-        compareEditedPM[1] or -1, compareEditedPM[2] or -1, compareEditedPM[34] or -1
-      ))
-
+      macroBaseSnapshotB = copyModAmountBase(modAmountBase)
       compareLatched = true
     end
 
+    comparingActive = true
     applyPresetParameters(compareUneditedPM)
-    applyRndLfoSync()       -- <- enforce lock for recalled A state
-    updateRndVisibility(nil, nil)   -- <- keep UI consistent (optional but recommended)
-    dprint("COMPARE_IT=1 -> showing unedited patch")
-    return
-  end
+    modAmountBase = copyModAmountBase(macroBaseSnapshotA)
+    applyMacroToAll(1, true)  -- show true patch values, ignore locks
+    applyRndLfoSync()
+    updateRndVisibility(nil, nil)
+    dprint("COMPARE_IT=1 -> showing unedited patch (macro bypassed)")
 
-  if v == 0 then
+  elseif v == 0 then
     if compareLatched and compareEditedPM then
       applyPresetParameters(compareEditedPM)
-      applyRndLfoSync()       -- <- enforce lock for recalled B state
-      updateRndVisibility(nil, nil)   -- <- keep UI consistent (optional but recommended)
-      dprint("COMPARE_IT=0 -> restored edited patch")
+      modAmountBase = copyModAmountBase(macroBaseSnapshotB or modAmountBase)
+
+      -- restore locked mod-amounts to their live (edited) values
+      for i = 1, 16 do
+        if modAmountLocked[i] then
+          local liveVal = compareEditedPM[MOD_AMOUNT_PARAM[i] + 1]
+          if liveVal then
+            parameterMap.set(deviceId, PT_VIRTUAL, PARAM_MOD_AMOUNT[i], liveVal)
+          end
+        end
+      end
+      applyMacroToAll()   -- current macro applied to unlocked slots
+
+      applyRndLfoSync()
+      updateRndVisibility(nil, nil)
+      dprint("COMPARE_IT=0 -> restored edited patch (macro reapplied)")
     else
       dprint("COMPARE_IT=0 -> no cached edited patch to restore")
     end
     compareLatched = false
+    comparingActive = false
+  end
+
+  compareApplying = false
+end
+
+-- ---------------- Macro amount LFO ----------------
+local PARAM_MACRO_LFO = 10070
+local PARAM_LFO_RATE = 10071
+local PARAM_MACRO_LFO_WAVE = 10072
+
+-- Macro LFO modes
+local MACRO_LFO_OFF = 0
+local MACRO_LFO_UNIPOLAR = 1
+local MACRO_LFO_BIPOLAR = 2
+
+-- Macro LFO waveforms
+local MACRO_LFO_TRIANGLE = 0
+local MACRO_LFO_SH = 1
+
+-- S&H behavior
+-- Maximum movement toward a new random target per cycle,
+-- expressed as a fraction of the active macro range.
+local MACRO_LFO_SH_MAX_STEP = 0.35
+
+-- Portion of each S&H cycle used to glide toward the
+-- new target. The remainder of the cycle holds the target.
+local MACRO_LFO_SH_GLIDE_FRACTION = 0.15
+
+local macroLfoState = {
+  isRunning = false,
+  phase = 0.5,
+
+  periodMs = 4000, -- one complete cycle
+  stepMs = 50,     -- timer interval
+
+  mode = MACRO_LFO_UNIPOLAR,
+  waveform = MACRO_LFO_TRIANGLE,
+
+  -- Current normalized S&H value.
+  -- 0.0 = minimum of active range
+  -- 1.0 = maximum of active range
+  heldRandom = 1.0,
+
+  -- S&H interpolation values.
+  shFromValue = 1.0,
+  shToValue = 1.0,
+
+  minValue = MACRO_CENTER,
+  maxValue = MACRO_MAX,
+}
+
+-- ---------------- LFO utility functions ----------------
+
+local function clamp01(value)
+  if value < 0 then
+    return 0
+  elseif value > 1 then
+    return 1
+  end
+
+  return value
+end
+
+-- Triangle waveform:
+-- phase 0.0   = minimum
+-- phase 0.5   = maximum
+-- phase 1.0   = minimum again
+local function triangleMacroValue(phase)
+  local triangle
+
+  if phase < 0.5 then
+    triangle = phase * 2
+  else
+    triangle = 2 - phase * 2
+  end
+
+  local value =
+    macroLfoState.minValue
+    + triangle * (macroLfoState.maxValue - macroLfoState.minValue)
+
+  return math.floor(value + 0.5)
+end
+
+-- Return the current S&H value mapped into the active macro range.
+local function sampleAndHoldMacroValue()
+  local value =
+    macroLfoState.minValue
+    + macroLfoState.heldRandom
+      * (macroLfoState.maxValue - macroLfoState.minValue)
+
+  return math.floor(value + 0.5)
+end
+
+local function currentMacroLfoValue()
+  if macroLfoState.waveform == MACRO_LFO_SH then
+    return sampleAndHoldMacroValue()
+  end
+
+  return triangleMacroValue(macroLfoState.phase)
+end
+
+-- ---------------- Correlated S&H with slew ----------------
+
+-- Select a nearby random target.
+--
+-- math.random() + math.random() - 1 creates a triangular
+-- distribution centered around zero. Small movements are
+-- more likely than large movements.
+local function chooseNextSampleAndHoldTarget()
+  macroLfoState.shFromValue = macroLfoState.heldRandom
+
+  local signedRandom = math.random() + math.random() - 1
+
+  local newTarget =
+    macroLfoState.shFromValue
+    + signedRandom * MACRO_LFO_SH_MAX_STEP
+
+  macroLfoState.shToValue = clamp01(newTarget)
+end
+
+local function updateSampleAndHoldGlide()
+  local glideFraction = MACRO_LFO_SH_GLIDE_FRACTION
+
+  if glideFraction <= 0 then
+    macroLfoState.heldRandom = macroLfoState.shToValue
     return
   end
+
+  -- Once the glide portion is complete, hold the target.
+  if macroLfoState.phase >= glideFraction then
+    macroLfoState.heldRandom = macroLfoState.shToValue
+    return
+  end
+
+  -- Interpolate from the previous value to the new target.
+  local glidePosition = macroLfoState.phase / glideFraction
+
+  macroLfoState.heldRandom =
+    macroLfoState.shFromValue
+    + (macroLfoState.shToValue - macroLfoState.shFromValue)
+      * glidePosition
+end
+
+-- ---------------- Apply current LFO value ----------------
+
+local function applyCurrentMacroLfoValue()
+  if comparingActive then
+    return
+  end
+
+  local value = currentMacroLfoValue()
+
+  macroKnobValue = value
+
+  -- Keep the virtual macro control/UI synchronized.
+  parameterMap.set(
+    deviceId,
+    PT_VIRTUAL,
+    PARAM_MACRO_KNOB,
+    value
+  )
+
+  -- Timer updates do not necessarily invoke the normal
+  -- macro-control processing path.
+  applyMacroToAll()
+end
+
+-- ---------------- Start/stop/tick ----------------
+
+local function stopMacroLfo()
+  macroLfoState.isRunning = false
+  timer.disable()
+  print("Macro LFO stopped")
+end
+
+local function macroLfoTick()
+  if not macroLfoState.isRunning then
+    return
+  end
+
+  -- Hold the LFO while COMPARE_IT is showing snapshot A.
+  if comparingActive then
+    return
+  end
+
+  macroLfoState.phase =
+    macroLfoState.phase
+    + macroLfoState.stepMs / macroLfoState.periodMs
+
+  local wrapped = false
+
+  if macroLfoState.phase >= 1 then
+    macroLfoState.phase = macroLfoState.phase - 1
+    wrapped = true
+  end
+
+  if macroLfoState.waveform == MACRO_LFO_SH then
+    -- At the start of each cycle, choose a nearby new target.
+    if wrapped then
+      chooseNextSampleAndHoldTarget()
+    end
+
+    -- Glide toward the target, then hold it.
+    updateSampleAndHoldGlide()
+  end
+
+  applyCurrentMacroLfoValue()
+end
+
+local function setMacroLfoRange(mode)
+  if mode ~= MACRO_LFO_UNIPOLAR
+      and mode ~= MACRO_LFO_BIPOLAR then
+    mode = MACRO_LFO_UNIPOLAR
+  end
+
+  macroLfoState.mode = mode
+  macroLfoState.maxValue = MACRO_MAX
+
+  if mode == MACRO_LFO_UNIPOLAR then
+    -- 100% down to 0%
+    macroLfoState.minValue = MACRO_CENTER
+  else
+    -- 100% down to -100%
+    macroLfoState.minValue = 0
+  end
+
+  print("Macro LFO range set (mode " .. tostring(mode) .. ")")
+end
+
+function startMacroLfo(mode)
+  setMacroLfoRange(mode)
+
+  if macroLfoState.isRunning then
+    -- Mode changed while running. Keep the timer and phase.
+    applyCurrentMacroLfoValue()
+    return
+  end
+
+  macroLfoState.isRunning = true
+
+  -- Start at 100%.
+  macroLfoState.phase = 0.5
+
+  -- Start S&H at 100% as well.
+  macroLfoState.heldRandom = 1.0
+  macroLfoState.shFromValue = 1.0
+  macroLfoState.shToValue = 1.0
+
+  timer.setPeriod(macroLfoState.stepMs)
+  timer.enable()
+
+  -- Apply the initial 100% value immediately.
+  applyCurrentMacroLfoValue()
+
+  print("Starting macro LFO")
+end
+
+function timer.onTick()
+  if macroLfoState.isRunning then
+    macroLfoTick()
+  end
+end
+
+-- ---------------- Macro LFO rate control ----------------
+
+local LFO_RATE_MIN_MS = 300
+local LFO_RATE_MAX_MS = 20000
+
+-- value: 0-255, logarithmic mapping to period in milliseconds
+local function lfoRateToPeriodMs(value)
+  local t = value / 255
+  local logMin = math.log(LFO_RATE_MIN_MS)
+  local logMax = math.log(LFO_RATE_MAX_MS)
+
+  -- 0 = slowest, 255 = fastest
+  local logPeriod = logMax + (logMin - logMax) * t
+
+  return math.floor(math.exp(logPeriod) + 0.5)
+end
+
+function displayLfoRate(valueObject, value)
+  local periodMs = lfoRateToPeriodMs(value)
+
+  if periodMs >= 1000 then
+    return string.format("%.1f s", periodMs / 1000)
+  else
+    return string.format("%d ms", periodMs)
+  end
+end
+
+function lfoRateChange(valueObject, value)
+  macroLfoState.periodMs = lfoRateToPeriodMs(value)
+
+  print(string.format(
+    "Macro LFO period set to %d ms",
+    macroLfoState.periodMs
+  ))
+end
+
+-- ---------------- Macro LFO waveform control ----------------
+
+function displayMacroLfoWave(valueObject, value)
+  if value == MACRO_LFO_SH then
+    return "S&H"
+  end
+
+  return "Triangle"
+end
+
+function macroLfoWaveChange(valueObject, value)
+  if value ~= MACRO_LFO_TRIANGLE
+      and value ~= MACRO_LFO_SH then
+    value = MACRO_LFO_TRIANGLE
+  end
+
+  -- If changing from triangle to S&H while running,
+  -- begin from the triangle's current position to avoid
+  -- an unrelated jump.
+  if value == MACRO_LFO_SH
+      and macroLfoState.waveform ~= MACRO_LFO_SH then
+
+    local currentValue = triangleMacroValue(macroLfoState.phase)
+    local range = macroLfoState.maxValue - macroLfoState.minValue
+    local normalized = 1.0
+
+    if range > 0 then
+      normalized =
+        (currentValue - macroLfoState.minValue) / range
+    end
+
+    normalized = clamp01(normalized)
+
+    macroLfoState.heldRandom = normalized
+    macroLfoState.shFromValue = normalized
+    macroLfoState.shToValue = normalized
+  end
+
+  macroLfoState.waveform = value
+
+  -- When switching to triangle, the normal triangle calculation
+  -- immediately takes over. When switching to S&H, the current
+  -- value is held until the next cycle boundary.
+  applyCurrentMacroLfoValue()
+
+  print(
+    "Macro LFO waveform: "
+    .. displayMacroLfoWave(nil, value)
+  )
 end
 
 -------------------- Patch selector on knob release ----------------------------------
@@ -725,9 +1179,6 @@ end
 
 function events.onPotTouchChange(potId, controlId, touched)
 --  if not touched then return end
-  local help = HELP_TEXTS[controlId]
-  if help then showHelp(help) end
-
   local idx = get_key_for_value(CTRL_SELECT_IT,controlId)
   if (idx == nil) then return end
   if (touched == true) and (activeTouchedControlId ~= controlId) then activeTouchedControlId = controlId end
@@ -759,7 +1210,7 @@ function events.onPotTouchChange(potId, controlId, touched)
     -- refresh compare baseline to newly loaded preset (unedited A state)
     compareUneditedPM = clonePM(pm)
     compareEditedPM   = nil
-    parameterMap.set(deviceId, PT_VIRTUAL, COMPARE_IT, 0)
+    parameterMap.set(deviceId, PT_VIRTUAL, PARAM_COMPARE_IT, 0)
 
     dprint(("Loaded preset %d => %s"):format(index, preset.name))  end
 end
@@ -771,7 +1222,33 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
   if msg:getType() ~= PT_VIRTUAL then return end
   local pNum = msg:getParameterNumber()
 
-  -- keep RND_RATE locked to LFO_RATE when sync is enabled
+  -- macro knob moved: rescale all 16 amounts, don't CC the macro itself
+  if pNum == PARAM_MACRO_KNOB then
+    macroKnobValue = math.max(0, math.min(MACRO_MAX, midiValue))
+    applyMacroToAll()
+    return
+  end
+
+  -- lock toggles
+  if PARAM_MOD_LOCK_INDEX[pNum] then
+    lockToggle(valueObjects[1], midiValue)
+    return
+  end
+
+  -- keep base in sync when user (or macro) touches a mod-amount control
+  local amtIdx = PARAM_MOD_AMOUNT_INDEX[pNum]
+  if amtIdx and not macroApplying and not compareApplying then
+    local factor = macroFactor()
+    if math.abs(factor) > 0.02 then
+      local base = 64 + (midiValue - 64) / factor
+      if base < 0 then base = 0 elseif base > 127 then base = 127 end
+      modAmountBase[amtIdx] = base
+    else
+      modAmountBase[amtIdx] = midiValue
+    end
+  end
+
+  -- existing Seashell behaviors
   if pNum == SYNC_TO_LFO or pNum == LFO_RATE_TYPE
   or pNum == LFO_RATE or pNum == LFO_NOTE
   then
@@ -782,9 +1259,7 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
     updateRndVisibility(nil, nil)
   end
 
-  -- send single 7-bit CC on device channel
   if pNum < 128 then
     sendCC(pNum, midiValue)
   end
-
 end
