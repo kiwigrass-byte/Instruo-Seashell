@@ -990,6 +990,43 @@ local function applyCurrentMacroLfoValue()
   applyMacroToAll()
 end
 
+-- ---------------- Macro LFO scope state ----------------
+
+local SCOPE_WIDTH = 314
+local SCOPE_HEIGHT = 140
+local CTRL_LFO_SCOPE = 178
+
+local g = graphics
+local scopeControl = controls.get(CTRL_LFO_SCOPE)
+
+local scope = {
+  y = {}
+}
+
+local scopeRepaintDiv = 3
+local scopeRepaintCount = 0
+
+-- ---------------- Macro LFO scope helpers ----------------
+
+local function macroValueToNorm(value)
+  local range =
+    macroLfo.maxValue - macroLfo.minValue
+  if range <= 0 then
+    return 0
+  end
+  local normalized = (value - macroLfo.minValue) / range
+  normalized = clamp01(normalized)
+  return (normalized * 2) - 1
+end
+
+function initializeScopeData()
+  for i = 1, SCOPE_WIDTH do
+    scope.y[i] = 0
+  end
+end
+
+-- ---------------- Macro LFO scheduler ----------------
+
 local macroLfoHandle = nil
 
 local function stopMacroLfoScheduler()
@@ -1000,24 +1037,35 @@ local function stopMacroLfoScheduler()
 end
 
 local function macroLfoStep()
-  if not macroLfo.isRunning or comparingActive then return end
-
+  if not macroLfo.isRunning or comparingActive then
+    return
+  end
   macroLfo.phase = macroLfo.phase + macroLfo.stepMs / macroLfo.periodMs
-  if macroLfo.phase >= 1 then macroLfo.phase = macroLfo.phase - 1 end
 
+  if macroLfo.phase >= 1 then
+    macroLfo.phase = macroLfo.phase - 1
+  end
   if macroLfo.waveform == MACRO_LFO_SH then
     local shPeriodMs = macroLfo.periodMs / shSampleMultiplier(macroLfo.periodMs)
     macroLfo.shPhase = macroLfo.shPhase + macroLfo.stepMs / shPeriodMs
-
     if macroLfo.shPhase >= 1 then
       macroLfo.shPhase = macroLfo.shPhase - 1
       chooseNextSampleAndHoldTarget()
     end
-
     updateSampleAndHoldGlide()
   end
-
   applyCurrentMacroLfoValue()
+  for i = 1, SCOPE_WIDTH - 1 do
+    scope.y[i] = scope.y[i + 1]
+  end
+  scope.y[SCOPE_WIDTH] =
+    macroValueToNorm(currentMacroLfoValue())
+  scopeRepaintCount =
+    scopeRepaintCount + 1
+  if scopeRepaintCount >= scopeRepaintDiv then
+    scopeRepaintCount = 0
+    scopeControl:repaint()
+  end
 end
 
 local function startMacroLfoScheduler()
@@ -1078,6 +1126,8 @@ function startMacroLfo(mode)
   applyCurrentMacroLfoValue()
   dprint("Macro LFO started")
 end
+
+-- ---------------- Macro LFO UI callbacks ----------------
 
 local LFO_RATE_MIN_MS = 300
 local LFO_RATE_MAX_MS = 20000
@@ -1151,41 +1201,6 @@ function macroLfoWaveChange(valueObject, value)
   end
   parameterMap.set(deviceId, PT_VIRTUAL, PARAM_LFO_RATE, currentRateValue)
   macroLfo.periodMs = lfoRateToPeriodMs(currentRateValue)
-end
-
--- ---------------- Macro LFO scope state ----------------
-
-local SCOPE_WIDTH = 140
-local SCOPE_HEIGHT = 140
-local CTRL_LFO_SCOPE = 178
-
-local g = graphics
-local scopeControl = controls.get(CTRL_LFO_SCOPE)
-
-local scope = {
-  y = {}
-}
-
-local scopeRepaintDiv = 3
-local scopeRepaintCount = 0
-
--- ---------------- Macro LFO scope helpers ----------------
-
-local function macroValueToNorm(value)
-  local range =
-    macroLfo.maxValue - macroLfo.minValue
-  if range <= 0 then
-    return 0
-  end
-  local normalized = (value - macroLfo.minValue) / range
-  normalized = clamp01(normalized)
-  return (normalized * 2) - 1
-end
-
-function initializeScopeData()
-  for i = 1, SCOPE_WIDTH do
-    scope.y[i] = 0
-  end
 end
 
 -- A callback to draw the XY pad graphics
