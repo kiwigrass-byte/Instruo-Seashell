@@ -21,10 +21,6 @@ info.setText(authorDate)
 
 events.subscribe(POTS|PAGES) 
 
-function preset.onLoad()
-  pages.display(1)
-end
-
 --------- Global Constants---------------
 
 -- number of MIDI parameters on Seashell
@@ -1157,6 +1153,74 @@ function macroLfoWaveChange(valueObject, value)
   macroLfo.periodMs = lfoRateToPeriodMs(currentRateValue)
 end
 
+-- ---------------- Macro LFO scope state ----------------
+
+local SCOPE_WIDTH = 140
+local SCOPE_HEIGHT = 140
+local CTRL_LFO_SCOPE = 178
+
+local g = graphics
+local scopeControl = controls.get(CTRL_LFO_SCOPE)
+
+local scope = {
+  y = {}
+}
+
+local scopeRepaintDiv = 3
+local scopeRepaintCount = 0
+
+-- ---------------- Macro LFO scope helpers ----------------
+
+local function macroValueToNorm(value)
+  local range =
+    macroLfo.maxValue - macroLfo.minValue
+  if range <= 0 then
+    return 0
+  end
+  local normalized = (value - macroLfo.minValue) / range
+  normalized = clamp01(normalized)
+  return (normalized * 2) - 1
+end
+
+function initializeScopeData()
+  for i = 1, SCOPE_WIDTH do
+    scope.y[i] = 0
+  end
+end
+
+-- A callback to draw the XY pad graphics
+function paintScope(control, value)
+    local bounds = control:getBounds()
+    local left   = 0
+    local right  = bounds[WIDTH] - 1
+    local top    = 0
+    local bottom = bounds[HEIGHT] - 1
+    -- Clear the Control's bounding box
+    g.setColor(0x0000)
+    g.fillRect(0, 0, bounds[WIDTH], bounds[HEIGHT])
+    g.setColor(0xffff)
+    g.drawRoundRect(0, 0, bounds[WIDTH], bounds[HEIGHT], 5)
+    -- midline
+    g.setColor(0x7bef) -- light gray
+    local mid = normToPixel(0, top + 4, bottom - 4)
+    g.drawLine(left + 4, mid, right - 4, mid)
+    -- signal trace
+    g.setColor(0xffff)
+    local lastx = left + 4
+    local lasty = normToPixel(scope.y[1], top + 4, bottom - 4)
+    for x = 2, math.min(SCOPE_WIDTH - 4, right - 4) do
+        local y = normToPixel(scope.y[x], top + 4, bottom - 4)
+        g.drawLine(lastx, lasty, x, y)
+        lastx, lasty = x, y
+    end
+end
+
+-- Map normalized [-1,1] to pixel Y inside the scope rect
+function normToPixel(n, top, bottom)
+    local center = (top + bottom) * 0.5
+    local amp    = (bottom - top) * 0.5
+    return math.floor(center - n * amp + 0.5)
+end
 
 
 -- set parameters and send CCs to reset mod matrix to match init patch
@@ -1294,4 +1358,17 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
   if pNum < 128 then
     sendCC(pNum, midiValue)
   end
+end
+
+function preset.onLoad()
+  pages.display(1)
+  local bounds = scopeControl:getBounds()
+  bounds[WIDTH] = SCOPE_WIDTH
+  bounds[HEIGHT] = SCOPE_HEIGHT
+  scopeControl:setBounds(bounds)
+  -- Initialize and assign Custom Control callbacks
+  initializeScopeData();
+  scopeControl:setPaintCallback(paintScope)
+  scopeControl:repaint()
+
 end
