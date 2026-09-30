@@ -601,10 +601,10 @@ end
 
 -- ---------------- Mod amount macro bipolar scaling ----------------
 local PARAM_MACRO_KNOB = 10038
-local MACRO_MAX = 255
-local MACRO_CENTER = 128
+local MACRO_MAX = 16383
+local MACRO_CENTER = 8192
 
-local macroKnobValue = 255   -- default = full effect (factor 1)
+local macroKnobValue = 16383   -- default = full effect (factor 1)
 local macroApplying = false    -- guard so applyMacroToAll doesn't re-derive base
 
 local function macroFactor()
@@ -968,38 +968,58 @@ local function stopMacroLfo()
   print("Macro LFO stopped")
 end
 
+local MACRO_TICK_MS = 20      -- or 25/50 if you want less CPU
+local MACRO_WRITE_BUDGET = 4  -- do a little work each tick
+local macroWriteIndex = 1
+
 local function macroLfoTick()
-  if not macroLfoState.isRunning then
-    return
-  end
+  if not macroLfoState.isRunning then return end
+  if comparingActive then return end
 
-  -- Hold the LFO while COMPARE_IT is showing snapshot A.
-  if comparingActive then
-    return
-  end
-
-  macroLfoState.phase =
-    macroLfoState.phase
-    + macroLfoState.stepMs / macroLfoState.periodMs
+  -- Cheap phase update
+  macroLfoState.phase = macroLfoState.phase + macroLfoState.stepMs / macroLfoState.periodMs
 
   local wrapped = false
-
   if macroLfoState.phase >= 1 then
     macroLfoState.phase = macroLfoState.phase - 1
     wrapped = true
   end
 
   if macroLfoState.waveform == MACRO_LFO_SH then
-    -- At the start of each cycle, choose a nearby new target.
-    if wrapped then
-      chooseNextSampleAndHoldTarget()
-    end
-
-    -- Glide toward the target, then hold it.
+    if wrapped then chooseNextSampleAndHoldTarget() end
     updateSampleAndHoldGlide()
   end
 
-  applyCurrentMacroLfoValue()
+  -- Drive the macro knob's logical value + on-screen display every tick
+  -- (single cheap write, keeps the knob control visually tracking the LFO)
+  local value = currentMacroLfoValue()
+  macroKnobValue = value
+  parameterMap.set(deviceId, PT_VIRTUAL, PARAM_MACRO_KNOB, value)
+
+  -- Budgeted, throttled writes to the 16 mod-amount cells
+  macroApplying = true   -- <-- restored: tells onChange to skip base re-derivation
+  local factor = macroFactor()
+  local writes = 0
+  while writes < MACRO_WRITE_BUDGET do
+    local i = macroWriteIndex
+    if i > 16 then
+      macroWriteIndex = 1
+      break
+    end
+
+    if modAmountBase[i] ~= 64 and not modAmountLocked[i] then
+      local newValue = scaledAmount(modAmountBase[i], factor)
+      local current = parameterMap.get(deviceId, PT_VIRTUAL, PARAM_MOD_AMOUNT[i])
+      if current ~= newValue then
+        parameterMap.set(deviceId, PT_VIRTUAL, PARAM_MOD_AMOUNT[i], newValue)
+        sendCC(PARAM_MOD_AMOUNT[i], newValue)
+      end
+    end
+
+    macroWriteIndex = i + 1
+    writes = writes + 1
+  end
+  macroApplying = false  -- <-- restored
 end
 
 local function setMacroLfoRange(mode)
@@ -1058,7 +1078,7 @@ end
 
 -- ---------------- Macro LFO rate control ----------------
 
-local LFO_RATE_MIN_MS = 4000
+local LFO_RATE_MIN_MS = 2000
 local LFO_RATE_MAX_MS = 20000
 
 -- value: 0-255, logarithmic mapping to period in milliseconds
