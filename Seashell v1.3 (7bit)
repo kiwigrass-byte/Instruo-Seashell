@@ -540,7 +540,7 @@ local function applyPresetParameters(pm)
   for i = 1, #pm-2 do -- there is no MIDI CC for the last 2 preset params (monitor mix, control behavior)
     local v = pm[i] or 0
     if v > 16383 then print("pNum = "..i) end
-    parameterMap.set(deviceId, PT_VIRTUAL, i-1, v)
+    parameterMap.updateValue(deviceId, PT_VIRTUAL, i-1, v)
   end
 end
 
@@ -597,10 +597,10 @@ end
 
 -- ---------------- Mod amount macro bipolar scaling ----------------
 local PARAM_MACRO_KNOB = 10038
-local MACRO_MAX = 16383
-local MACRO_CENTER = 8192
+local MACRO_MAX = 200
+local MACRO_CENTER = 100
 
-local macroKnobValue = 16383   -- default = full effect (factor 1)
+local macroKnobValue = 200   -- default = full effect (factor 1)
 local macroApplying = false    -- guard so applyMacroToAll doesn't re-derive base
 
 local function macroFactor()
@@ -620,13 +620,6 @@ for i, p in ipairs(PARAM_MOD_AMOUNT) do PARAM_MOD_AMOUNT_INDEX[p] = i end
 
 local modAmountBase = {}
 for i = 1, 16 do modAmountBase[i] = 64 end
-
-local function scaledAmount(base, factor)
-  local v = 64 + (base - 64) * factor
-  v = math.floor(v + 0.5)
-  if v < 0 then v = 0 elseif v > 127 then v = 127 end
-  return v
-end
 
 function displayMacroPercent(valueObject, value)
   local factor
@@ -663,7 +656,6 @@ function lockToggle(valueObject, value)
   local parameter = valueObject:getMessage():getParameterNumber()
   local idx = PARAM_MOD_LOCK_INDEX[parameter]
   if not idx then return value end
-
   modAmountLocked[idx] = (value ~= 0)
   local ctrl = controls.get(CTRL_MOD_LOCK[idx])
   if ctrl then
@@ -672,24 +664,34 @@ function lockToggle(valueObject, value)
   return value
 end
 
+local function scaledAmount(base, factor)
+  local v = 64 + (base - 64) * factor
+  v = math.floor(v + 0.5)
+  if v < 0 then v = 0 elseif v > 127 then v = 127 end
+  return v
+end
+
 local function applyMacroToAll(factorOverride, ignoreLocks)
   macroApplying = true
   local factor = factorOverride or macroFactor()
-
   for i = 1, 16 do
+    -- Skip slots with no modulation amount set — scaling has no effect.
     if modAmountBase[i] ~= 64 then
-      local isLocked = modAmountLocked[i]
+      local lockValue = parameterMap.get(deviceId, PT_VIRTUAL, PARAM_MOD_LOCK[i]) or 0
+      local isLocked = (lockValue ~= 0)
       if ignoreLocks or not isLocked then
         local newValue = scaledAmount(modAmountBase[i], factor)
         local current = parameterMap.get(deviceId, PT_VIRTUAL, PARAM_MOD_AMOUNT[i])
+        -- Only send if the value actually changes.
         if current ~= newValue then
           parameterMap.set(deviceId, PT_VIRTUAL, PARAM_MOD_AMOUNT[i], newValue)
-          sendCC(PARAM_MOD_AMOUNT[i], newValue)   -- Seashell's 7-bit sender, not sendSimpleNRPN
+          sendCC(PARAM_MOD_AMOUNT[i], newValue)
         end
       end
     end
   end
-
+ -- Baseline lifecycle is managed explicitly by LFO start/resume/stop
+ -- and compare transitions. Do not auto-clear it here.
   macroApplying = false
 end
 
@@ -827,7 +829,7 @@ end
 -- ============================================================
 
 local PARAM_MACRO_LFO      = 10070
-local PARAM_LFO_RATE       = 10071
+local PARAM_MACRO_LFO_RATE       = 10071
 local PARAM_MACRO_LFO_WAVE = 10072
 
 local MACRO_LFO_OFF      = 0
@@ -986,13 +988,17 @@ local function applyCurrentMacroLfoValue()
   if comparingActive then return end
   local value = currentMacroLfoValue()
   macroKnobValue = value
-  parameterMap.set(deviceId, PT_VIRTUAL, PARAM_MACRO_KNOB, value)
+  -- Avoid generating redundant UI/parameter events.
+  if lastMacroLfoValue ~= value then
+    parameterMap.set(deviceId, PT_VIRTUAL, PARAM_MACRO_KNOB, value)
+    lastMacroLfoValue = value
+  end
   applyMacroToAll()
 end
 
 -- ---------------- Macro LFO scope state ----------------
 
-local SCOPE_WIDTH = 314
+local SCOPE_WIDTH = 140 -- 314
 local SCOPE_HEIGHT = 140
 local CTRL_LFO_SCOPE = 178
 
@@ -1003,7 +1009,7 @@ local scope = {
   y = {}
 }
 
-local scopeRepaintDiv = 3
+local scopeRepaintDiv = 2
 local scopeRepaintCount = 0
 
 -- ---------------- Macro LFO scope helpers ----------------
@@ -1040,33 +1046,49 @@ local function macroLfoStep()
   if not macroLfo.isRunning or comparingActive then
     return
   end
-  macroLfo.phase = macroLfo.phase + macroLfo.stepMs / macroLfo.periodMs
 
-  if macroLfo.phase >= 1 then
+  macroLfo.phase =
+    macroLfo.phase + macroLfo.stepMs / macroLfo.periodMs
+
+  while macroLfo.phase >= 1 do
     macroLfo.phase = macroLfo.phase - 1
   end
+
   if macroLfo.waveform == MACRO_LFO_SH then
-    local shPeriodMs = macroLfo.periodMs / shSampleMultiplier(macroLfo.periodMs)
-    macroLfo.shPhase = macroLfo.shPhase + macroLfo.stepMs / shPeriodMs
-    if macroLfo.shPhase >= 1 then
+    local shPeriodMs =
+      macroLfo.periodMs / shSampleMultiplier(macroLfo.periodMs)
+
+    macroLfo.shPhase =
+      macroLfo.shPhase + macroLfo.stepMs / shPeriodMs
+
+    while macroLfo.shPhase >= 1 do
       macroLfo.shPhase = macroLfo.shPhase - 1
       chooseNextSampleAndHoldTarget()
     end
+
     updateSampleAndHoldGlide()
   end
-  applyCurrentMacroLfoValue()
+
+  -- Calculate one value and use it for both the knob and scope.
+  local value = currentMacroLfoValue()
+
+  applyCurrentMacroLfoValue(value)
+
+  -- Scope history update.
   for i = 1, SCOPE_WIDTH - 1 do
     scope.y[i] = scope.y[i + 1]
   end
-  scope.y[SCOPE_WIDTH] =
-    macroValueToNorm(currentMacroLfoValue())
-  scopeRepaintCount =
-    scopeRepaintCount + 1
+
+  scope.y[SCOPE_WIDTH] = macroValueToNorm(value)
+
+  -- At a 10 ms control rate, repaint approximately every 20 ms.
+  scopeRepaintCount = scopeRepaintCount + 1
   if scopeRepaintCount >= scopeRepaintDiv then
     scopeRepaintCount = 0
     scopeControl:repaint()
   end
 end
+
 
 local function startMacroLfoScheduler()
   stopMacroLfoScheduler()
@@ -1114,6 +1136,9 @@ function startMacroLfo(mode)
     applyCurrentMacroLfoValue()
     return
   end
+
+  lastMacroLfoValue = nil
+  scopeRepaintCount = 0
 
   captureLfoMapBaseline()
   macroLfo.isRunning = true
@@ -1194,12 +1219,12 @@ function macroLfoWaveChange(valueObject, value)
   macroLfo.waveform = value
   applyCurrentMacroLfoValue()
 
-  local currentRateValue = parameterMap.get(deviceId, PT_VIRTUAL, PARAM_LFO_RATE) or 0
+  local currentRateValue = parameterMap.get(deviceId, PT_VIRTUAL, PARAM_MACRO_LFO_RATE) or 0
   local bump = math.min(255, currentRateValue + 1)
   if bump ~= currentRateValue then
-    parameterMap.set(deviceId, PT_VIRTUAL, PARAM_LFO_RATE, bump)
+    parameterMap.set(deviceId, PT_VIRTUAL, PARAM_MACRO_LFO_RATE, bump)
   end
-  parameterMap.set(deviceId, PT_VIRTUAL, PARAM_LFO_RATE, currentRateValue)
+  parameterMap.set(deviceId, PT_VIRTUAL, PARAM_MACRO_LFO_RATE, currentRateValue)
   macroLfo.periodMs = lfoRateToPeriodMs(currentRateValue)
 end
 
