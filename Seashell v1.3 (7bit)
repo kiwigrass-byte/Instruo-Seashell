@@ -442,7 +442,6 @@ end
 
 -- scale display parameter value to 0..MIDI_MAX 
 local function scaleSymmetric(x, min, max) return round(((x - min) * MIDI_MAX) / (max - min)) end
-local function scale0N(x, max) return round((x * MIDI_MAX) / max) end
 
  -- map 0,1,..N values to corresponding 0..127 values
  local function map0N(x, max)
@@ -478,25 +477,25 @@ local function parsePresetParameters(pm_raw)
   pm[5]  = map0N(pm[5],3)
   pm[6]  = map0N(pm[6],3)
   pm[7]  = map0N(pm[7],3)
-  pm[8]  = scale0N(pm[8], 100) -- 0..100
+  pm[8]  = map0N(pm[8], 100) -- 0..100
   pm[9]  = map1N(pm[9],12)
   pm[10] = map0N(pm[10],1)
-  pm[11] = scale0N(pm[11], 100)
-  pm[12] = scale0N(pm[12], 100)
-  pm[13] = scale0N(pm[13], 100)
-  pm[14] = scale0N(pm[14], 100)
-  pm[15] = scale0N(pm[15], 100)
+  pm[11] = map0N(pm[11], 100)
+  pm[12] = map0N(pm[12], 100)
+  pm[13] = map0N(pm[13], 100)
+  pm[14] = map0N(pm[14], 100)
+  pm[15] = map0N(pm[15], 100)
   pm[16] = map0N(pm[16],1)
   pm[17] = map0N(pm[17],7)
-  pm[18] = scale0N(pm[18], 100) 
+  pm[18] = map0N(pm[18], 100) 
   pm[19] = scaleSymmetric(pm[19], -100, 100) -- -100..100
-  pm[20] = scale0N(pm[20], 100) 
-  pm[21] = scale0N(pm[21], 100)
+  pm[20] = map0N(pm[20], 100) 
+  pm[21] = map0N(pm[21], 100)
   pm[22] = map0N(pm[22],2)
-  pm[23] = scale0N(pm[23], 10) -- 0..10
-  pm[24] = scale0N(pm[24], 10)
-  pm[25] = scale0N(pm[25], 100)
-  pm[26] = scale0N(pm[26], 10)
+  pm[23] = map0N(pm[23], 10) -- 0..10
+  pm[24] = map0N(pm[24], 10)
+  pm[25] = map0N(pm[25], 100)
+  pm[26] = map0N(pm[26], 10)
   pm[27] = map0N(pm[27],1)
   pm[28] = map0N(pm[28],1)
   pm[29] = map0N(pm[29],1)
@@ -518,13 +517,13 @@ local function parsePresetParameters(pm_raw)
   pm[45] = map0N(pm[45],18)
   pm[46] = map0N(pm[46],1)
   pm[47] = map0N(pm[47],1)
-  pm[48] = scale0N(pm[48], 100)
-  pm[49] = scale0N(pm[49], 100)
+  pm[48] = map0N(pm[48], 100)
+  pm[49] = map0N(pm[49], 100)
   pm[50] = map0N(pm[50],1)
   pm[51] = map0N(pm[51],1)
   pm[52] = map0N(pm[52],1)
   pm[53] = map0N(pm[53],1)
-  pm[54] = scale0N(pm[54], 100)
+  pm[54] = map0N(pm[54], 100)
 
   for i = 63,78 do
     pm[i] = scaleSymmetric(pm[i], -100, 100) -- -100..100
