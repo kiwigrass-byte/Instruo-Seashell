@@ -1394,7 +1394,7 @@ local function resetVirtualParams()
   lfo.waveform    = LFO_SINE
   lfo.phase       = 0.5
   lfo.shPhase     = 0.5
-  lfo.periodMs    = 4000      -- match your intended default rate
+  lfo.periodMs    = 20000      
   lfo.stepMs      = 50
   lfo.amplitude   = 1.0
   lfo.minValue    = MACRO_CENTER
@@ -1508,7 +1508,11 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
     lfoWaveChange(valueObjects[1], midiValue)
     return
   end
-
+  -- Macro LFO rate
+  if pNum == PARAM_MACRO_LFO_RATE then
+    lfoRateChange(valueObjects[1], midiValue)
+    return
+  end
   -- Macro knob moved: rescale all 16 amounts, don't re-send the macro itself
   if pNum == PARAM_MACRO_KNOB then
     if macroApplying then return end   -- ignore our own write-back
