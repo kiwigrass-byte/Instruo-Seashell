@@ -1333,14 +1333,16 @@ function paintScope(control, value)
     -- Clear the Control's bounding box
     g.setColor(0x0000)
     g.fillRect(0, 0, bounds[WIDTH], bounds[HEIGHT])
-    g.setColor(0xffff)
+    g.setColor(WHITE)
     g.drawRoundRect(0, 0, bounds[WIDTH], bounds[HEIGHT], 5)
+
     -- midline
-    g.setColor(0x7bef) -- light gray
+    g.setColor(WHITE) -- mid gray
     local mid = normToPixel(0, top + 4, bottom - 4)
     g.drawLine(left + 4, mid, right - 4, mid)
+
     -- signal trace
-    g.setColor(0xffff)
+    g.setColor(ORANGE)
     local lastx = left + 4
     local lasty = normToPixel(scope.y[1], top + 4, bottom - 4)
     for x = 2, math.min(SCOPE_WIDTH - 4, right - 4) do
@@ -1418,7 +1420,7 @@ function events.onPotTouchChange(potId, controlId, touched)
     clearMatrixState()
     seedMatrixDimState()
     repaintMatrix()
-    
+
     captureMacroBaseA()
 
     -- send a program change to the Seashell as well (so Seashell app also stays in sync)
