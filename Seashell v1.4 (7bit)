@@ -1331,16 +1331,14 @@ function paintScope(control, value)
     local top    = 0
     local bottom = bounds[HEIGHT] - 1
     -- Clear the Control's bounding box
-    g.setColor(0x0000)
+    g.setColor(0x000000)
     g.fillRect(0, 0, bounds[WIDTH], bounds[HEIGHT])
-    g.setColor(WHITE)
+    g.setColor(0x808080) -- mid gray
     g.drawRoundRect(0, 0, bounds[WIDTH], bounds[HEIGHT], 5)
-
     -- midline
-    g.setColor(WHITE) -- mid gray
+    g.setColor(0x808080)
     local mid = normToPixel(0, top + 4, bottom - 4)
     g.drawLine(left + 4, mid, right - 4, mid)
-
     -- signal trace
     g.setColor(ORANGE)
     local lastx = left + 4
