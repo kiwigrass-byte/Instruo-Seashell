@@ -1341,7 +1341,7 @@ function resetIt(valueObject,value)
   repaintMatrix()
 end
 
--- helper to reset all virtual (E1 only) macro knob and compare params to default when a new patch is loaded 
+-- helper to reset all virtual (E1 only) macro knob and compare params to default when a new patch is loaded
 local function resetVirtualParams()
   parameterMap.updateValue(deviceId, PT_VIRTUAL, PARAM_MACRO_KNOB, MACRO_MAX)
   parameterMap.updateValue(deviceId, PT_VIRTUAL, PARAM_MACRO_LFO, 0)
@@ -1378,10 +1378,6 @@ local function resetVirtualParams()
   for i = 1, 16 do
     lfoMapBaseline[i] = 64
     modAmountBase[i]  = 64
-    modAmountLocked[i] = false
-    parameterMap.updateValue(deviceId, PT_VIRTUAL, PARAM_MOD_LOCK[i], 0)
-    local ctrl = controls.get(CTRL_MOD_LOCK[i])
-    if ctrl then ctrl:setColor(lockColors.off) end
   end
 
   initializeScopeData()
@@ -1428,9 +1424,7 @@ function events.onPotTouchChange(potId, controlId, touched)
     clearMatrixState()
     seedMatrixDimState()
     repaintMatrix()
-
     resetVirtualParams()
-
     captureMacroBaseA()
 
     -- send a program change to the Seashell as well (so Seashell app also stays in sync)
