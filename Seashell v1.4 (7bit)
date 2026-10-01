@@ -1379,6 +1379,55 @@ local function clearMatrixState()
     end
   end
 end
+
+-- helper to reset all virtual (E1 only) macro knob and compare params to default when a new patch is loaded 
+local function resetVirtualParams()
+  parameterMap.updateValue(deviceId, PT_VIRTUAL, PARAM_MACRO_KNOB, MACRO_MAX)
+  parameterMap.updateValue(deviceId, PT_VIRTUAL, PARAM_MACRO_LFO, 0)
+  parameterMap.updateValue(deviceId, PT_VIRTUAL, PARAM_MACRO_LFO_RATE, 0)
+  parameterMap.updateValue(deviceId, PT_VIRTUAL, PARAM_MACRO_LFO_WAVE, 0)
+  parameterMap.updateValue(deviceId, PT_VIRTUAL, PARAM_COMPARE_IT, 0)
+
+  if macroLfo.isRunning then
+    stopMacroLfo()
+  end
+
+  -- explicitly reset runtime LFO state (not driven by parameterMap.updateValue)
+  macroLfo.mode        = LFO_OFF
+  macroLfo.waveform    = LFO_SINE
+  macroLfo.phase       = 0.5
+  macroLfo.shPhase     = 0.5
+  macroLfo.periodMs    = 4000      -- match your intended default rate
+  macroLfo.stepMs      = 50
+  macroLfo.amplitude   = 1.0
+  macroLfo.minValue    = MACRO_CENTER
+  macroLfo.maxValue    = MACRO_MAX
+  macroLfo.heldRandom  = 1.0
+  macroLfo.shFromValue = 1.0
+  macroLfo.shToValue   = 1.0
+  macroLfo.shBoundary  = nil
+
+  -- clear macro/compare caches too
+  macroKnobValue          = MACRO_MAX
+  macroBaseSnapshotA      = nil
+  macroBaseSnapshotB      = nil
+  compareApplying         = false
+  lfoWasRunningBeforeCompare = false
+  lfoBaselineValid        = false
+  for i = 1, 16 do
+    lfoMapBaseline[i] = 64
+    modAmountBase[i]  = 64
+    modAmountLocked[i] = false
+    parameterMap.updateValue(deviceId, PT_VIRTUAL, PARAM_MOD_LOCK[i], 0)
+    local ctrl = controls.get(CTRL_MOD_LOCK[i])
+    if ctrl then ctrl:setColor(lockColors.off) end
+  end
+
+  initializeScopeData()
+  scopeControl:setPaintCallback(paintScope)
+  scopeControl:repaint()
+end
+
 -------------------- Patch selector on knob release ----------------------------------
 
 -- activeTouchedControlId holds which of the control knobs was touched (HT @oldgearguy)
@@ -1418,6 +1467,8 @@ function events.onPotTouchChange(potId, controlId, touched)
     clearMatrixState()
     seedMatrixDimState()
     repaintMatrix()
+
+    resetVirtualParams()
 
     captureMacroBaseA()
 
