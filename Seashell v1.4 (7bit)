@@ -1316,6 +1316,13 @@ function macroLfoWaveChange(valueObject, value)
   macroLfo.periodMs = lfoRateToPeriodMs(currentRateValue)
 end
 
+-- Map normalized [-1,1] to pixel Y inside the scope rect
+local function normToPixel(n, top, bottom)
+    local center = (top + bottom) * 0.5
+    local amp    = (bottom - top) * 0.5
+    return math.floor(center - n * amp + 0.5)
+end
+
 -- A callback to draw the XY pad graphics
 function paintScope(control, value)
     local bounds = control:getBounds()
@@ -1343,14 +1350,6 @@ function paintScope(control, value)
     end
 end
 
--- Map normalized [-1,1] to pixel Y inside the scope rect
-function normToPixel(n, top, bottom)
-    local center = (top + bottom) * 0.5
-    local amp    = (bottom - top) * 0.5
-    return math.floor(center - n * amp + 0.5)
-end
-
-
 -- set parameters and send CCs to reset mod matrix to match init patch
 function resetIt(valueObject,value)
   if value == 0 then return end
@@ -1370,6 +1369,16 @@ function resetIt(valueObject,value)
   repaintMatrix()
 end
 
+local function clearMatrixState()
+  for row = 1, 4 do
+    rowIsZero[row] = false
+    for col = 1, 4 do
+      colIsZero[col] = false
+      cellIsZero[row][col] = false
+      lockIsOn[row][col] = false
+    end
+  end
+end
 -------------------- Patch selector on knob release ----------------------------------
 
 -- activeTouchedControlId holds which of the control knobs was touched (HT @oldgearguy)
@@ -1405,6 +1414,11 @@ function events.onPotTouchChange(potId, controlId, touched)
     end
     -- send patch parameter values to Seashell
     applyPresetParameters(pm)
+
+    clearMatrixState()
+    seedMatrixDimState()
+    repaintMatrix()
+    
     captureMacroBaseA()
 
     -- send a program change to the Seashell as well (so Seashell app also stays in sync)
@@ -1487,26 +1501,6 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
   if pNum < 128 then
     if macroApplying then return end   -- applyMacroToAll already sent this CC explicitly
     sendCC(pNum, midiValue)
-  end
-end
-
-local function seedMatrixDimState()
-  -- row sources 54..57
-  for row = 1, 4 do
-    rowIsZero[row] = (parameterMap.get(deviceId, PT_VIRTUAL, MOD_SOURCE_PARAM[row]) or 0) == 0
-  end
-
-  -- column destinations 58..61
-  for col = 1, 4 do
-    colIsZero[col] = (parameterMap.get(deviceId, PT_VIRTUAL, MOD_DEST_PARAM[col]) or 0) == 0
-  end
-
-  -- cell amounts 62..77, center = 64 means dim
-  for row = 1, 4 do
-    for col = 1, 4 do
-      local idx = (row - 1) * 4 + col
-      cellIsZero[row][col] = (parameterMap.get(deviceId, PT_VIRTUAL, MOD_AMOUNT_PARAM[idx]) or 64) == 64
-    end
   end
 end
 
