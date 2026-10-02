@@ -453,15 +453,6 @@ local function applyPresetParameters(pm)
   end
 end
 
--- helper function to send 7-bit CC on channel channel
-local function sendCC(paramNum, value)
-  local v = math.floor(tonumber(value) or 0)
-  if v < 0 or v > 127 then
-    error(("Invalid 7-bit value %d for CC %d"):format(v, paramNum))
-  end
-  midi.sendControlChange(port, channel, paramNum, v)
-end
-
 --------- block to handle sync of random rate/notes to lfo rate/notes ---------------------
 
 -- guard to avoid re-entrant loops when we set RND_RATE from inside onChange
@@ -480,7 +471,7 @@ local function applyRndLfoSync()
   -- 1) align RND mode to LFO mode
   if rndMode ~= lfoMode then
     parameterMap.set(deviceId, PT_VIRTUAL, RND_RATE_TYPE, lfoMode)
-    sendCC(RND_RATE_TYPE, lfoMode)
+    midi.sendControlChange(port, channel, RND_RATE_TYPE, lfoMode)
   end
 
   -- 2) align value in the active mode, and send mirrored param too
@@ -490,7 +481,7 @@ local function applyRndLfoSync()
     local rndNote = parameterMap.get(deviceId, PT_VIRTUAL, RND_NOTE) or -1
     if rndNote ~= lfoNote then
       parameterMap.set(deviceId, PT_VIRTUAL, RND_NOTE, lfoNote)
-      sendCC(RND_NOTE, lfoNote)
+      midi.sendControlChange(port, channel, RND_NOTE, lfoNote)
     end
   else
     -- free-rate mode: copy LFO_RATE -> RND_RATE
@@ -498,7 +489,7 @@ local function applyRndLfoSync()
     local rndRate = parameterMap.get(deviceId, PT_VIRTUAL, RND_RATE) or -1
     if rndRate ~= lfoRate then
       parameterMap.set(deviceId, PT_VIRTUAL, RND_RATE, lfoRate)
-      sendCC(RND_RATE, lfoRate)
+      midi.sendControlChange(port, channel, RND_RATE, lfoRate)
     end
   end
   syncingRndToLfo = false
@@ -743,7 +734,7 @@ local function applyMacroToAll(factorOverride, ignoreLocks)
         local current = parameterMap.get(deviceId, PT_VIRTUAL, PARAM_MOD_AMOUNT[i])
         if current ~= newValue then
           parameterMap.set(deviceId, PT_VIRTUAL, PARAM_MOD_AMOUNT[i], newValue)
-          sendCC(PARAM_MOD_AMOUNT[i], newValue)
+          midi.sendControlChange(port, channel, PARAM_MOD_AMOUNT[i], newValue)
         end
       end
     end
@@ -766,7 +757,7 @@ local function copyModAmountBase(src)
 end
 
 -- call this once, right after a preset is parsed/applied (SELECT_IT and
--- resetIt already do applyPresetParameters(pm) — add a call to this there)
+-- resetIt already do applyPresetParameters(pm))
 local function captureMacroBaseA()
   for i = 1, 16 do
     modAmountBase[i] = parameterMap.get(deviceId, PT_VIRTUAL, PARAM_MOD_AMOUNT[i]) or 64
@@ -1058,7 +1049,7 @@ end
 
 -- ---------------- Macro LFO scope state ----------------
 
-local SCOPE_WIDTH = 140 -- 314
+local SCOPE_WIDTH = 140 -- 314 for 2 slots wide
 local SCOPE_HEIGHT = 140
 local CTRL_LFO_SCOPE = 178
 
@@ -1334,7 +1325,7 @@ function resetIt(valueObject,value)
   for i = MOD_MATRIX_FIRST_PARAM, MOD_MATRIX_LAST_PARAM do
     local v = pm[i+1] or 0
     parameterMap.set(deviceId, PT_VIRTUAL, i, v)
-    sendCC(i, v)
+    midi.sendControlChange(port, channel, i, v)
   end  
   dprint("Reset Mod Matrix")
   captureMacroBaseA()
@@ -1461,16 +1452,6 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
     return
   end
 
-  -- Macro LFO waveform
-  if pNum == PARAM_MACRO_LFO_WAVE then
-    lfoWaveChange(valueObjects[1], midiValue)
-    return
-  end
-  -- Macro LFO rate
-  if pNum == PARAM_MACRO_LFO_RATE then
-    lfoRateChange(valueObjects[1], midiValue)
-    return
-  end
   -- Macro knob moved: rescale all 16 amounts, don't re-send the macro itself
   if pNum == PARAM_MACRO_KNOB then
     if macroApplying then return end   -- ignore our own write-back
@@ -1478,6 +1459,7 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
     applyMacroToAll()
     return
   end
+
   -- Lock toggles
   if PARAM_MOD_LOCK_INDEX[pNum] then
     lockToggle(valueObjects[1], midiValue)
@@ -1510,7 +1492,7 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
 
   if pNum < 128 then
     if macroApplying then return end   -- applyMacroToAll already sent this CC explicitly
-    sendCC(pNum, midiValue)
+      midi.sendControlChange(port, channel, pNum, midiValue)
   end
 end
 
