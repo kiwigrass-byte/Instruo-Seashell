@@ -5,8 +5,8 @@
 -- Preset compatibility check
 assert( controller.isRequired(MODEL_MK2, "5.0.0"),  "Version 5.0.0 or higher is required" )
 
--- a debug helper. remove later
-local DEBUG = true
+-- a debug helper. 
+local DEBUG = false
 
 local function dprint(msg)
    if DEBUG then print(msg) end
@@ -19,8 +19,6 @@ local port      = currentDevice:getPort ()
 
 local authorDate = "kiwigrass 2026" -- populate the bottom RH screen information display on load
 info.setText(authorDate)
-
-events.subscribe(POTS|PAGES) 
 
 --------- Global Constants---------------
 
@@ -1546,6 +1544,8 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
 end
 
 function preset.onLoad()
+  events.subscribe(POTS|PAGES) 
+
   pages.display(1)
 
   local bounds = scopeControl:getBounds()
