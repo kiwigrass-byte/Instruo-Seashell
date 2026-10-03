@@ -444,12 +444,16 @@ local function parsePresetParameters(pm_raw)
   return pm
 end
 
--- Set parameters from pasred preset
+-- Set parameters from parsed preset
 local function applyPresetParameters(pm)
   for i = 1, #pm-2 do -- there is no MIDI CC for the last 2 preset params (monitor mix, control behavior)
-    local v = pm[i] or 0
-    if v > 16383 then print("pNum = "..i) end
-    parameterMap.updateValue(deviceId, PT_VIRTUAL, i-1, v)
+    local pNum = i - 1
+    -- lock params (78..93) are not in the parameter map; lock state is handled by applyLockStates()
+    if pNum < 78 or pNum > 93 then
+      local v = pm[i] or 0
+      if v > 16383 then print("pNum = "..pNum) end
+      parameterMap.updateValue(deviceId, PT_VIRTUAL, pNum, v)
+    end
   end
 end
 
@@ -697,27 +701,6 @@ function dimAmt42(valueObject, value) setCellZero(4, 2, value) end
 function dimAmt43(valueObject, value) setCellZero(4, 3, value) end
 function dimAmt44(valueObject, value) setCellZero(4, 4, value) end
 
-local lockWriting = false
-
-local function setModAmountLock(idx, locked)
-  locked = locked and true or false
-  modAmountLocked[idx] = locked
-
-  local want = locked and 127 or 0
-  if (parameterMap.get(deviceId, PT_VIRTUAL, PARAM_MOD_LOCK[idx]) or 0) ~= want then
-    lockWriting = true
-    parameterMap.set(deviceId, PT_VIRTUAL, PARAM_MOD_LOCK[idx], want)
-    lockWriting = false
-    midi.sendControlChange(port, channel, PARAM_MOD_LOCK[idx], want)
-  end
-
-  if not macroApplying then
-    local row = math.floor((idx - 1) / 4) + 1
-    local col = ((idx - 1) % 4) + 1
-    updateMatrixCell(row, col)
-  end
-end
-
 local function toggleModAmountLock(idx)
   setModAmountLock(idx, not modAmountLocked[idx])
 end
@@ -789,6 +772,10 @@ local function snapshotCurrentPM()
   for i = 1, PARAM_NUM do
     pm[i] = parameterMap.get(deviceId, PT_VIRTUAL, i - 1) or 0
   end
+  -- lock params aren't in the map (they read back as 16537); use the Lua lock state instead
+  for idx = 1, 16 do
+    pm[PARAM_MOD_LOCK[idx] + 1] = modAmountLocked[idx] and 127 or 0
+  end
   return pm
 end
 
@@ -797,6 +784,38 @@ local function clonePM(src)
   local dst = {}
   for i = 1, #src do dst[i] = src[i] end
   return dst
+end
+
+-- lock-state snapshots for A/B compare (lock state lives in Lua, not the parameter map)
+local compareEditedLocks = nil
+
+local function copyLocks(src)
+  local t = {}
+  for i = 1, 16 do t[i] = (src and src[i]) == true end
+  return t
+end
+
+-- patch lock states from a pm table (pm is 1-based, so param N is pm[N + 1]).
+-- Only 1..127 counts as locked; 0 or an unset value (16537) counts as unlocked.
+local function locksFromPM(pm)
+  local t = {}
+  for i = 1, 16 do
+    local v = pm and pm[PARAM_MOD_LOCK[i] + 1]
+    t[i] = (type(v) == "number" and v > 0 and v <= 127)
+  end
+  return t
+end
+
+-- set lock states, send CCs only for the ones that changed, then repaint
+local function applyLockStates(states)
+  for i = 1, 16 do
+    local want = (states[i] == true)
+    if modAmountLocked[i] ~= want then
+      modAmountLocked[i] = want
+      midi.sendControlChange(port, channel, PARAM_MOD_LOCK[i], want and 127 or 0)
+    end
+  end
+  repaintMatrix()
 end
 
 local compareLatched = false
@@ -822,6 +841,7 @@ function compareIt(valueObject, value)
         compareUneditedPM = snapshotCurrentPM()
       end
       compareEditedPM = snapshotCurrentPM()
+      compareEditedLocks = copyLocks(modAmountLocked)   
       macroBaseSnapshotB = copyModAmountBase(modAmountBase)
       compareLatched = true
     end
@@ -829,6 +849,7 @@ function compareIt(valueObject, value)
     -- Show unedited baseline (A)
     comparingActive = true
     applyPresetParameters(compareUneditedPM)
+    applyLockStates(locksFromPM(compareUneditedPM))     -- Show the patch's locks
 
     -- Restore macro base to A and bypass macro scaling/locks while comparing.
     if macroBaseSnapshotA then
@@ -844,6 +865,7 @@ function compareIt(valueObject, value)
     -- Restore edited snapshot (B)
     if compareLatched and compareEditedPM then
       applyPresetParameters(compareEditedPM)
+      applyLockStates(compareEditedLocks or copyLocks(modAmountLocked))   -- NEW: restore edited locks
 
       if macroBaseSnapshotB then
         modAmountBase = copyModAmountBase(macroBaseSnapshotB)
@@ -1529,9 +1551,10 @@ function preset.onLoad()
   initializeScopeData();
   scopeControl:setPaintCallback(paintScope)
   scopeControl:repaint()
-end
 
-function preset.onReady()
+  clearMatrixState()
   seedMatrixDimState()
+  applyLockStates(locksFromPM(pm))
   repaintMatrix()
 end
+
