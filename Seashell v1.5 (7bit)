@@ -1464,6 +1464,7 @@ function events.onPotTouchChange(potId, controlId, touched)
 
     clearMatrixState()
     seedMatrixDimState()
+    applyLockStates(locksFromPM(pm))  
     repaintMatrix()
     resetVirtualParams()
     captureMacroBaseA()
