@@ -605,8 +605,8 @@ local function updateModCell(row, col)
   local color = dim and orange.off or orange.on
   if not dim and modAmountLocked[idx] == true then color = RED end
   local id = CTRL_MATRIX_CELL[row][col][1]
-  local c = controls.get(id)
-  if c then c:setColor(color) end
+  local ok, c = pcall(controls.get, id)
+  if ok and c then c:setColor(color) end
 end
 
 local function updateLockCell(row, col)
@@ -619,8 +619,8 @@ local function updateLockCell(row, col)
     color = modAmountLocked[idx] and lockColors.on or lockColors.off
   end
   local id = CTRL_MATRIX_CELL[row][col][2]
-  local c = controls.get(id)
-  if c then c:setColor(color) end
+  local ok, c = pcall(controls.get, id)
+  if ok and c then c:setColor(color) end
 end
 
 local function updateMatrixCell(row, col)
@@ -824,6 +824,8 @@ end
 
 local compareLatched = false
 
+local lfo, stopLfo, resumeLfo, captureLfoMapBaseline
+
 function compareIt(valueObject, value)
   local v = math.floor(tonumber(value) or 0)
   compareApplying = true
@@ -925,7 +927,7 @@ local SH_RATE_MIN_PERIOD_MS = 2000
 local SH_RATE_MAX_PERIOD_MS = 20000
 local SH_RATE_MAX_MULT = 4
 
-local lfo = {
+lfo = {
   isRunning = false,
   phase = 0.5,
   shPhase = 0.5,
@@ -1051,7 +1053,7 @@ local function updateSampleAndHoldGlide()
   end
 end
 
-local function captureLfoMapBaseline()
+function captureLfoMapBaseline()
   for i = 1, 16 do
     lfoMapBaseline[i] = parameterMap.get(deviceId, PT_VIRTUAL, PARAM_MOD_AMOUNT[i]) or 64
   end
@@ -1176,7 +1178,7 @@ local function startLfoScheduler()
   lfoHandle = schedule.every(lfo.stepMs, lfoStep)
 end
 
-local function stopLfo()
+function stopLfo()
   lfo.isRunning = false
 
   if lfoBaselineValid then
@@ -1192,7 +1194,7 @@ local function stopLfo()
   dprint("Macro LFO stopped")
 end
 
-local function resumeLfo()
+function resumeLfo()
   if lfo.isRunning then return end
   if not lfoBaselineValid then captureLfoMapBaseline() end
   lfo.isRunning = true
@@ -1375,8 +1377,8 @@ local function resetVirtualParams()
   end
 
   -- explicitly reset runtime LFO state (not driven by parameterMap.updateValue)
-  lfo.mode        = LFO_OFF
-  lfo.waveform    = LFO_SINE
+  lfo.mode        = MACRO_LFO_OFF
+  lfo.waveform    = MACRO_LFO_SINE
   lfo.phase       = 0.5
   lfo.shPhase     = 0.5
   lfo.periodMs    = 20000      
@@ -1428,10 +1430,10 @@ function events.onPotTouchChange(potId, controlId, touched)
     local current = parameterMap.get(deviceId, PT_VIRTUAL, MOD_AMOUNT_PARAM[amtIdx])
     if touched == true then
       tapDownControlId = controlId
-      tapDownTime = time.getCurrentTime() * 1000
+      tapDownTime = controller.micros() / 1000
       tapDownValue = current
     elseif tapDownControlId == controlId then
-      local elapsed = time.getCurrentTime() * 1000 - tapDownTime
+      local elapsed = controller.micros() / 1000 - tapDownTime
       if elapsed <= TAP_MAX_MS and current == tapDownValue then
         toggleModAmountLock(amtIdx)
       end
