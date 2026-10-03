@@ -1475,9 +1475,10 @@ function parameterMap.onChange(valueObjects, origin, midiValue)
 
   -- Lock toggles
   if PARAM_MOD_LOCK_INDEX[pNum] then
-    lockToggle(valueObjects[1], midiValue)
+    local lockValue = midiValue ~= 0 and 127 or 0
+    lockToggle(valueObjects[1], lockValue)
     if not macroApplying then
-      midi.sendControlChange(port, channel, pNum, midiValue)
+      midi.sendControlChange(port, channel, pNum, lockValue)
     end
     return
   end
