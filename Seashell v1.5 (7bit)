@@ -1,3 +1,7 @@
+-- Instruo Seashell controller v1.5
+-- by kiwigrass
+-- 10/03/26
+
 -- Preset compatibility check
 assert( controller.isRequired(MODEL_MK2, "5.0.0"),  "Version 5.0.0 or higher is required" )
 
