@@ -571,6 +571,20 @@ for row = 1, 4 do
   end
 end
 
+-- reverse lookup: amount control id -> flat index 1..16 (row-major)
+local CTRL_MOD_AMOUNT_INDEX = {}
+for row = 1, 4 do
+  for col = 1, 4 do
+    CTRL_MOD_AMOUNT_INDEX[CTRL_MATRIX_CELL[row][col][1]] = (row - 1) * 4 + col
+  end
+end
+
+-- tap gesture state (short tap on a mod amount control toggles its lock)
+local TAP_MAX_MS = 250
+local tapDownControlId = nil
+local tapDownTime = 0
+local tapDownValue = nil
+
 -- cached state
 local rowIsZero = { false, false, false, false }
 local colIsZero = { false, false, false, false }
@@ -587,7 +601,9 @@ for i = 1, 16 do modAmountLocked[i] = false end
 
 local function updateModCell(row, col)
   local dim = rowIsZero[row] or colIsZero[col] or cellIsZero[row][col]
+  local idx = (row - 1) * 4 + col
   local color = dim and orange.off or orange.on
+  if not dim and modAmountLocked[idx] == true then color = RED end
   local id = CTRL_MATRIX_CELL[row][col][1]
   local c = controls.get(id)
   if c then c:setColor(color) end
@@ -699,18 +715,32 @@ function dimAmt42(valueObject, value) setCellZero(4, 2, value) end
 function dimAmt43(valueObject, value) setCellZero(4, 3, value) end
 function dimAmt44(valueObject, value) setCellZero(4, 4, value) end
 
+local function setModAmountLock(idx, locked)
+  locked = locked and true or false
+  modAmountLocked[idx] = locked
+
+  local want = locked and 1 or 0
+  if (parameterMap.get(deviceId, PT_VIRTUAL, PARAM_MOD_LOCK[idx]) or 0) ~= want then
+    parameterMap.set(deviceId, PT_VIRTUAL, PARAM_MOD_LOCK[idx], want)
+  end
+
+  if not macroApplying then
+    local row = math.floor((idx - 1) / 4) + 1
+    local col = ((idx - 1) % 4) + 1
+    updateMatrixCell(row, col)
+  end
+end
+
+local function toggleModAmountLock(idx)
+  setModAmountLock(idx, not modAmountLocked[idx])
+end
+
 function lockToggle(valueObject, value)
   local parameter = valueObject:getMessage():getParameterNumber()
   local idx = PARAM_MOD_LOCK_INDEX[parameter]
   if not idx then return value end
 
-  modAmountLocked[idx] = (value ~= 0)
-
-  if not macroApplying then
-    local row = math.floor((idx - 1) / 4) + 1
-    local col = ((idx - 1) % 4) + 1
-    updateLockCell(row, col)
-  end
+  setModAmountLock(idx, value ~= 0)
 
   return value
 end
@@ -1393,6 +1423,22 @@ end
 
 function events.onPotTouchChange(potId, controlId, touched)
 --  if not touched then return end
+  local amtIdx = CTRL_MOD_AMOUNT_INDEX[controlId]
+  if amtIdx then
+    local current = parameterMap.get(deviceId, PT_VIRTUAL, MOD_AMOUNT_PARAM[amtIdx])
+    if touched == true then
+      tapDownControlId = controlId
+      tapDownTime = time.getCurrentTime() * 1000
+      tapDownValue = current
+    elseif tapDownControlId == controlId then
+      local elapsed = time.getCurrentTime() * 1000 - tapDownTime
+      if elapsed <= TAP_MAX_MS and current == tapDownValue then
+        toggleModAmountLock(amtIdx)
+      end
+      tapDownControlId = nil
+    end
+    return
+  end
   local idx = get_key_for_value(CTRL_SELECT_IT,controlId)
   if (idx == nil) then return end
   if (touched == true) and (activeTouchedControlId ~= controlId) then activeTouchedControlId = controlId end
