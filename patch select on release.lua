@@ -1,8 +1,8 @@
--------------------- Program chnage on knob release ----------------------------------
+-------------------- Program change on knob release ----------------------------------
 
-local CTRL_SELECT = 1 -- set to id # of selector control
-local CHANNEL = 1 -- set to MIDI channel used
-local PORT = 1 -- set to MIDI port being used
+local CTRL_SELECT = 1 -- set to the reference id # of the program selector fader
+local CHANNEL = 1 -- set to MIDI channel the receiving device is listening on 
+local PORT = 1 -- set to MIDI port the PC message is being sent from
 
 -- activeTouchedControlId holds which of the control knobs was touched (HT @oldgearguy)
 local activeTouchedControlId   = -1
@@ -19,6 +19,7 @@ function events.onPotTouchChange(potId, controlId, touched)
     -- send a program change
     midi.sendProgramChange(PORT, CHANNEL, midiValue)
     print("program change " .. midiValue .. " sent")
+    activeTouchedControlId = -1
   end
 end
 
