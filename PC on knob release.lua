@@ -1,6 +1,6 @@
 -------------------- Program change on knob release ----------------------------------
 
-local CTRL_SELECT = 1 -- set to the reference id # of the program selector fader
+local CTRL_PC = 1 -- set to the reference id # of the program change fader
 local CHANNEL = 1 -- set to MIDI channel the receiving device is listening on 
 local PORT = PORT_1 -- set to MIDI port the PC message is being sent from
 
@@ -9,7 +9,7 @@ local activeTouchedControlId   = -1
 
 -- send program change message only after control knob is released
 function events.onPotTouchChange(potId, controlId, touched)
-  if controlId ~= CTRL_SELECT then return end
+  if controlId ~= CTRL_PC then return end
   if (touched == true) and (activeTouchedControlId ~= controlId) then 
     activeTouchedControlId = controlId 
     return 
