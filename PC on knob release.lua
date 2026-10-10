@@ -2,7 +2,7 @@
 
 local CTRL_SELECT = 1 -- set to the reference id # of the program selector fader
 local CHANNEL = 1 -- set to MIDI channel the receiving device is listening on 
-local PORT = 1 -- set to MIDI port the PC message is being sent from
+local PORT = PORT_1 -- set to MIDI port the PC message is being sent from
 
 -- activeTouchedControlId holds which of the control knobs was touched (HT @oldgearguy)
 local activeTouchedControlId   = -1
